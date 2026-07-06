@@ -1,6 +1,6 @@
 from fastapi.responses import FileResponse
 from io import BytesIO
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import sqlite3
@@ -16,7 +16,7 @@ from typing import List
 import json
 
 SECRET_KEY = "mi-super-secreto-jwt-1234"
-app = FastAPI(title="API PrevenSaaS")
+app = FastAPI(title="API PrevenEASY")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGOS_DIR = os.path.join(BASE_DIR, "static", "logos")
@@ -553,7 +553,7 @@ app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), na
 @app.get("/")
 
 def read_root():
-    return {"message": "API de PrevenSaaS funcionando. Visita /static/index.html para la interfaz web."}
+    return {"message": "API de PrevenEASY funcionando. Visita /static/index.html para la interfaz web."}
 
 @app.get("/api/proyectos")
 def get_proyectos():
@@ -1523,6 +1523,7 @@ async def create_empresa(
     fecha_fin: str = Form(""),
     correo_emisor: str = Form(""),
     contrasena_app: str = Form(""),
+    anio_inicio: str = Form(""),
     logo: UploadFile = File(None)
 ):
     if not validate_rut(rut):
@@ -2645,7 +2646,7 @@ class AuditoriaCierre(BaseModel):
     compromisos: str
 
 @app.post("/api/auditorias/cierre/{auditoria_id}")
-def cerrar_auditoria(auditoria_id: str, data: AuditoriaCierre):
+def cerrar_auditoria(auditoria_id: str, data, background_tasks: BackgroundTasks: AuditoriaCierre):
     try:
         df_aud = _sql_read("AUDIT_", "Auditorias")
         idx = df_aud[df_aud["id"].astype(str) == str(auditoria_id)].index
@@ -3855,7 +3856,7 @@ async def guardar_planes(payload: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/auditorias/{aud_id}/aprobar_planes")
-async def aprobar_planes(aud_id: str, token_admin: str = Form(...), prevencionista_id: str = Form(...), prevencionista_clave: str = Form(...), pdf_file: UploadFile = File(None)):
+async def aprobar_planes(aud_id: str, token_admin: str = Form(...), prevencionista_id: str = Form(...), prevencionista_clave: str = Form(...), pdf_file: UploadFile = File(None)), background_tasks: BackgroundTasks BackgroundTasks = None):
     token = token_admin
     rut = prevencionista_id
     clave = prevencionista_clave
