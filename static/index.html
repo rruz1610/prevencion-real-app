@@ -1,0 +1,1872 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrevenSaaS - Sistema de Prevención</title>
+    <link rel="stylesheet" href="styles.css?v=1782771020">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+    .non-admin .admin-only { display: none !important; }
+</style>
+</head>
+<body>
+    <!-- Pantalla de Selección de Perfil (Inicio) -->
+    <div id="profile-selector-screen" class="profile-selector-overlay">
+        <div class="glassmorphism selector-card" style="width: 400px; text-align: center; max-width: 90%;">
+            <h2 style="color: var(--primary-color); margin-bottom: 10px;">PrevenSaaS Pro</h2>
+            <p style="color: var(--text-muted); margin-bottom: 30px;">Ingrese sus credenciales de acceso</p>
+            
+            <form id="login-form" onsubmit="event.preventDefault(); performLogin();" style="text-align: left;">
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label>RUT</label>
+                    <input type="text" id="login_rut" required placeholder="Ej: 15.367.481-7" onblur="this.value = formatRutStr(this.value)" style="width: 100%; box-sizing: border-box; background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 10px; border-radius: 6px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 25px;">
+                    <label>Contraseña</label>
+                    <input type="password" id="login_clave" required placeholder="Ingrese su contraseña" style="width: 100%; box-sizing: border-box; background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 10px; border-radius: 6px;">
+                </div>
+                <div id="login-error" style="color: #ff4d4d; text-align: center; margin-bottom: 15px; display: none; font-size: 0.9rem;"></div>
+                <button id="btn-ingresar" type="submit" class="btn-primary" style="width: 100%; height: 45px; font-size: 1.1rem;">Ingresar</button>
+                <div style="text-align: center; margin-top: 15px;"><a href="#" onclick="mostrarRecuperarClave()" style="color: var(--primary-color); font-size: 0.9rem; text-decoration: underline;">Olvidé mi contraseña</a></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2>PrevenSaaS</h2>
+                <span class="badge">Pro</span>
+            </div>
+            <ul class="nav-links">
+                <li data-target="pagos" id="nav-pagos" style="background-color: #2c3e50; font-weight: bold; margin-top: 10px;">Control de Pagos (Admin)</li>
+                <li class="active" data-target="mantenedores" id="nav-mantenedores">Mantenedores (Excel)</li>
+                <li data-target="trabajadores" id="nav-trabajadores">Trabajadores (ODI)</li>
+                <li data-target="inspecciones" id="nav-inspecciones">Auditoria</li>
+                <li data-target="reportes" id="nav-reportes">Gráficos (Auditoria)</li>
+                <li data-target="reportabilidad" id="nav-reportabilidad">Reportabilidad Mensual</li>
+                <li data-target="graficos-reportabilidad" id="nav-graficos-reportabilidad">Gráficos (Reportabilidad)</li>
+                <li data-target="epp" id="nav-epp">Stock EPP</li>
+                <li data-target="karin" id="nav-karin">Ley Karin</li>
+                <li data-target="planaccion" id="nav-planaccion">Planes de Acción</li>
+                <li data-target="maquinaria-obra" id="nav-maquinaria-obra">Maquinaria en Obra</li>
+            </ul>
+            <div style="margin-top: auto; padding-top: 15px; border-top: 1px solid var(--border-color);">
+                <button class="btn-secondary" style="width: 100%; font-size: 0.85rem; padding: 8px 12px;" onclick="logout()">Cerrar sesión y volver a la página de inicio</button>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="search-bar">
+                    <input type="text" placeholder="Buscar proyectos, trabajadores...">
+                </div>
+                <div id="admin-company-selector" style="display: none; margin-right: 20px; align-items: center;">
+                    <label style="color: var(--text-color); margin-right: 10px; font-weight: 500; font-size: 0.9rem;">Empresa Activa:</label>
+                    <select id="global_empresa_selector" onchange="cambiarEmpresaGlobal()" style="padding: 6px 12px; border-radius: 6px; background: var(--bg-dark); color: white; border: 1px solid var(--border-color); outline: none;">
+                        <option value="">Todas las Empresas</option>
+                    </select>
+                </div>
+                <div class="user-profile">
+                    <div class="avatar">Admin</div>
+                </div>
+            </header>
+
+            <div class="content-sections">
+                <!-- Dashboard Removed -->
+
+                <!-- Trabajadores Section -->
+                <section id="trabajadores" class="content-section">
+                    <div class="section-header">
+                        <h1>Trabajadores y Estado ODI</h1>
+                        <button class="btn-primary" onclick="mostrarModalNuevoTrabajador()">+ Nuevo Trabajador</button>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>RUT</th>
+                                    <th>Nombre</th>
+                                    <th>Cargo</th>
+                                    <th>Proyecto</th>
+                                    <th>ODI Firmado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-trabajadores">
+                                <!-- Data will be loaded via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                
+                <!-- Control de Pagos Section -->
+                <section id="pagos" class="content-section" style="display: none;">
+                    <div class="section-header">
+                        <h1>Control de Pagos y Contratos (SaaS)</h1>
+                        <p style="color: var(--text-muted);">Administre la facturación y la vigencia de los contratos de sus empresas clientes.</p>
+                    </div>
+                    
+                    <div class="glassmorphism" style="margin-bottom: 20px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <h3 style="margin-bottom: 5px;">Empresa Seleccionada</h3>
+                                <p id="pagos-empresa-nombre" style="font-size: 1.5rem; font-weight: bold; color: var(--primary-color);">Seleccione una empresa en la barra superior</p>
+                            </div>
+                            <div style="text-align: right;">
+                                <p style="color: var(--text-muted); font-size: 0.9rem;">Vigencia del Contrato</p>
+                                <p id="pagos-empresa-vigencia" style="font-weight: bold; font-size: 1.1rem;">-</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="glassmorphism">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3>Historial de Pagos</h3>
+                            <button class="btn-primary" onclick="abrirModalPago()">+ Registrar Pago</button>
+                        </div>
+                        <table class="data-table">
+                            <thead><tr><th>N° Factura</th><th>Monto</th><th>Fecha de Pago</th></tr></thead>
+                            <tbody id="tabla-pagos">
+                                <tr><td colspan="4" style="text-align:center;">Seleccione una empresa para ver sus pagos</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Mantenedores Section (Active by default now) -->
+                <section id="mantenedores" class="content-section active">
+                    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                        <h1>Mantenedores (Excel Multi-Empresa)</h1>
+                    </div>
+                    
+                    <div class="tabs" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button id="btn-mant-empresas" class="btn-primary tab-btn active admin-only" onclick="switchMantenedorTab('empresas')">Empresas</button>
+                        <button id="btn-mant-obras" class="btn-secondary tab-btn" onclick="switchMantenedorTab('obras')">Obras / Sucursales</button>
+                        <button id="btn-mant-gerentes" class="btn-secondary tab-btn" onclick="switchMantenedorTab('gerentes')">Gerentes</button>
+                        <button id="btn-mant-gerentes-prevencion" class="btn-secondary tab-btn" onclick="switchMantenedorTab('gerentes-prevencion')">Gerentes de Prevención</button>
+                        <button id="btn-mant-prevencionistas" class="btn-secondary tab-btn" onclick="switchMantenedorTab('prevencionistas')">Prevencionistas</button>
+                        <button id="btn-mant-jefes-obra" class="btn-secondary tab-btn" onclick="switchMantenedorTab('jefes-obra')">Administrador de Obra</button>
+                        <button id="btn-mant-coordinadores-prevencion" class="btn-secondary tab-btn" onclick="switchMantenedorTab('coordinadores-prevencion')">Coordinadores de Prevención</button>
+                        <button id="btn-mant-anio-empresas" class="btn-secondary tab-btn" onclick="switchMantenedorTab('anio-empresas')">Año de Inicio Empresas</button>
+                        <button id="btn-mant-config-empresa" class="btn-secondary tab-btn" onclick="switchMantenedorTab('config-empresa')" style="background-color: #9b59b6; color: white; border: none;">Notificaciones y Plazos</button>
+
+                    </div>
+
+                    <!-- Empresas Tab -->
+                    <div id="tab-empresas" class="mantenedor-tab active">
+                        <button id="btn-nueva-empresa" class="btn-primary" onclick="mostrarModal('modal-empresa')" style="margin-bottom: 15px;">+ Nueva Empresa</button>
+                        <table class="data-table">
+                            <thead><tr><th>RUT</th><th>Nombre Empresa</th><th>Vigencia</th><th>Estado</th></tr></thead>
+                            <tbody id="tabla-empresas"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Año Empresas Tab -->
+                    <div id="tab-anio-empresas" class="mantenedor-tab" style="display: none;">
+                        <h3 style="margin-bottom: 10px;">Configurar Año de Inicio por Empresa</h3>
+                        <table class="data-table">
+                            <thead><tr><th>Empresa</th><th>Año Inicio</th><th>Acciones</th></tr></thead>
+                            <tbody id="tabla-anio-empresas"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Obras Tab -->
+                    <div id="tab-obras" class="mantenedor-tab" style="display: none;">
+                        <button id="btn-nueva-obra" class="btn-primary" onclick="mostrarModal('modal-obra')" style="margin-bottom: 15px;">+ Nueva Obra</button>
+                        <table class="data-table">
+                            <thead><tr><th>Empresa ID</th><th>Nombre Obra</th><th>Ubicación</th></tr></thead>
+                            <tbody id="tabla-obras"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Gerentes Tab -->
+                    <div id="tab-gerentes" class="mantenedor-tab" style="display: none;">
+                        <button class="btn-primary" onclick="mostrarModal('modal-gerente')" style="margin-bottom: 15px;">+ Nuevo Gerente</button>
+                        <table class="data-table">
+                            <thead><tr><th>Empresa ID</th><th>RUT</th><th>Nombre</th><th>Correo</th><th>Acciones</th></tr></thead>
+                            <tbody id="tabla-gerentes"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Gerentes de Prevencion Tab -->
+                    <div id="tab-gerentes-prevencion" class="mantenedor-tab" style="display: none;">
+                        <button class="btn-primary" onclick="mostrarModal('modal-gerente-prevencion')" style="margin-bottom: 15px;">+ Nuevo Gerente Prevención</button>
+                        <table class="data-table">
+                            <thead><tr><th>Empresa ID</th><th>RUT</th><th>Nombre</th><th>Correo</th><th>Acciones</th></tr></thead>
+                            <tbody id="tabla-gerentes-prevencion"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Prevencionistas Tab -->
+                    <div id="tab-prevencionistas" class="mantenedor-tab" style="display: none;">
+                        <button class="btn-primary" onclick="mostrarModal('modal-prevencionista')" style="margin-bottom: 15px;">+ Nuevo Prevencionista</button>
+                        <table class="data-table">
+                            <thead><tr><th>Obra ID</th><th>RUT</th><th>Nombre</th><th>Correo</th><th>Acciones</th></tr></thead>
+                            <tbody id="tabla-prevencionistas"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Jefes de Obra Tab -->
+                    <div id="tab-jefes-obra" class="mantenedor-tab" style="display: none;">
+                        <button class="btn-primary" onclick="mostrarModal('modal-jefe-obra')" style="margin-bottom: 15px;">+ Nuevo Administrador de Obra</button>
+                        <table class="data-table">
+                            <thead><tr><th>Obra ID</th><th>RUT</th><th>Nombre</th><th>Correo</th><th>Acciones</th></tr></thead>
+                            <tbody id="tabla-jefes-obra"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Coordinadores de Prevención Tab -->
+                    <div id="tab-coordinadores-prevencion" class="mantenedor-tab" style="display: none;">
+                        <button class="btn-primary" onclick="mostrarModal('modal-coordinador-prevencion')" style="margin-bottom: 15px;">+ Nuevo Coordinador de Prevención</button>
+                        <table class="data-table">
+                            <thead><tr><th>Obra ID</th><th>RUT</th><th>Nombre</th><th>Correo</th><th>Acciones</th></tr></thead>
+                            <tbody id="tabla-coordinadores-prevencion"></tbody>
+                        </table>
+                    </div>
+                
+
+    
+                    <!-- Config Empresa Tab -->
+                    <div id="tab-config-empresa" class="mantenedor-tab" style="display: none;">
+                        <h2 style="margin-bottom: 20px; color: var(--primary-color);">Configuración de Empresa Activa</h2>
+                        <p style="color: var(--text-muted); margin-bottom: 20px;">
+                            Seleccione una empresa en la barra superior (Top Bar) para ver y editar sus configuraciones específicas.
+                        </p>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 800px; margin: 0 auto;">
+                            <!-- Plazos de Cierre -->
+                            <div class="glassmorphism" style="flex: 1; min-width: 300px; padding: 20px;">
+                                <h3 style="margin-bottom: 15px;">1. Plazo de Cierre (Horas)</h3>
+                                <button class="btn-primary" onclick="mostrarModal('modal-plazo')" style="margin-bottom: 15px; font-size: 0.8rem;">Modificar Plazo</button>
+                                <p style="font-size: 0.9rem; color: #ccc;">Define el plazo en horas que tiene la empresa para solucionar y cerrar la auditoría.</p>
+                                <div id="lbl-plazo-actual" style="font-size: 1.5rem; font-weight: bold; margin-top: 10px; color: var(--primary-color);">Sin definir</div>
+                            </div>
+                            
+                            <!-- Correos Terminada -->
+                            <div class="glassmorphism" style="flex: 1; min-width: 300px; padding: 20px;">
+                                <h3 style="margin-bottom: 15px;">2. Correos: Auditoría Terminada</h3>
+                                <button class="btn-primary" onclick="mostrarModal('modal-correo-terminada')" style="margin-bottom: 15px; font-size: 0.8rem;">+ Añadir Destinatario</button>
+                                <p style="font-size: 0.9rem; color: #ccc; margin-bottom: 10px;">Notificar cuando se finaliza la inspección en terreno.</p>
+                                <table class="data-table" style="font-size: 0.85rem;">
+                                    <thead><tr><th>Cargo / Perfil a Notificar</th><th>Acciones</th></tr></thead>
+                                    <tbody id="tabla-correos-terminada"></tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Correos Cerrada -->
+                            <div class="glassmorphism" style="flex: 1; min-width: 300px; padding: 20px;">
+                                <h3 style="margin-bottom: 15px;">3. Correos: Auditoría Cerrada</h3>
+                                <button class="btn-primary" onclick="mostrarModal('modal-correo-cerrada')" style="margin-bottom: 15px; font-size: 0.8rem;">+ Añadir Destinatario</button>
+                                <p style="font-size: 0.9rem; color: #ccc; margin-bottom: 10px;">Notificar cuando se ingresan los planes de acción.</p>
+                                <table class="data-table" style="font-size: 0.85rem;">
+                                    <thead><tr><th>Cargo / Perfil a Notificar</th><th>Acciones</th></tr></thead>
+                                    <tbody id="tabla-correos-cerrada"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Inspecciones Section -->
+                <section id="inspecciones" class="content-section">
+                    <div class="section-header">
+                        <h1>Auditoria</h1>
+                        <div style="display: flex; gap: 10px;">
+                            <button id="btn-view-history" class="btn-primary tab-btn active" onclick="toggleView('audit-history')">Historial</button>
+                            <button id="btn-view-execute" class="btn-secondary tab-btn" onclick="toggleView('audit-execute')">Ejecutar Auditoría</button>
+                            <button id="btn-view-builder" class="btn-secondary tab-btn" onclick="toggleView('audit-builder')">Creador de Formularios</button>
+                        </div>
+                    </div>
+
+                    <!-- Audit History View -->
+                    <div id="view-audit-history">
+                        <div class="table-container" style="background: var(--bg-card); border-radius: 16px; padding: 20px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        
+                                        <th>Fecha</th>
+                                        <th>Obra / Proyecto</th>
+                                        <th>Plantilla</th>
+                                        <th>Cumplimiento</th>
+                                        <th>Detalle (Cumple/No/NA)</th>
+                                        <th>Estado Cierre</th>
+                                        <th>Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-historial-auditorias">
+                                    <!-- Loaded via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Execute Audit View -->
+                    <div id="view-audit-execute" style="display: none;">
+                        <div id="audit-setup-container" class="audit-selector glassmorphism" style="padding: 20px; margin-bottom: 20px;">
+                            <div class="form-group">
+                                <label>Obra a Auditar</label>
+                                <select id="audit_obra_id" required>
+                                    <option value="">Seleccione una obra...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Plantilla de Auditoría</label>
+                                <select id="audit_plantilla_id" required></select>
+                            </div>
+                            <div class="form-group" id="audit-prevencionista-group">
+                                <label>Prevencionista a auditar</label>
+                                <select id="audit_prevencionista_id" required>
+                                    <option value="">Seleccione una Obra primero...</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="audit-jefe-obra-group">
+                                <label>Administrador de Obra a auditar</label>
+                                <select id="audit_jefe_obra_id" required>
+                                    <option value="">Seleccione una Obra primero...</option>
+                                </select>
+                            </div>
+                            <button class="btn-primary" onclick="iniciarAuditoria()">Iniciar Auditoría</button>
+                        </div>
+
+                        <div id="audit-form-container" style="display: none;">
+                            <h2 id="audit-title" style="margin-bottom: 15px; color: var(--primary-color);"></h2>
+                            <form id="form-auditoria">
+                                <div id="audit-categories">
+                                    <!-- Dynamic questions will go here -->
+                                </div>
+                                <div class="form-actions" style="margin-top: 20px;">
+                                    <button type="button" class="btn-secondary" onclick="cancelarAuditoria()">Cancelar</button>
+                                    <button type="button" class="btn-secondary" style="background-color: #2980b9; color: white;" onclick="guardarAuditoriaEnProceso()">Guardar Progreso y Salir</button>
+                                    <button type="submit" class="btn-primary">Finalizar Auditoría</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Builder View -->
+                    <div id="view-audit-builder" style="display: none;">
+                        <!-- List of existing templates for editing -->
+                        <div class="glassmorphism" style="padding: 20px; margin-bottom: 20px;">
+                            <h3 style="margin-bottom: 15px; color: var(--primary-color);">Editar Plantilla Existente</h3>
+                            <div id="builder-existing-templates-list" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <!-- Loaded via JS -->
+                            </div>
+                        </div>
+
+                        
+                        <!-- Importar desde Excel -->
+                        <div class="glassmorphism" style="padding: 20px; margin-bottom: 20px;">
+                            <h2 style="margin-bottom: 15px; color: var(--primary-color);">Importar Plantilla desde Excel</h2>
+                            
+                            <p style="color: var(--text-muted); margin-bottom: 15px; font-size: 0.9rem;">
+                                Sube un archivo Excel para crear una nueva plantilla con múltiples preguntas rápidamente. 
+                                Primero, descarga el formato base y llénalo.
+                            </p>
+                            
+                            <div style="margin-bottom: 20px;">
+                                <button type="button" class="btn-secondary" style="background-color: #3498db; color: white; border: none;" onclick="descargarFormatoExcel()">Descargar Formato Base (Excel)</button>
+                            </div>
+                            
+                            <hr style="margin: 20px 0; border-color: rgba(255,255,255,0.1);">
+                            
+                            <form id="form-importar-excel" onsubmit="event.preventDefault(); subirFormatoExcel();">
+                                <div class="form-group">
+                                    <label>Nombre de la Nueva Plantilla</label>
+                                    <input type="text" id="import_nombre" placeholder="Ej. Inspección de Herramientas" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Archivo Excel Lleno</label>
+                                    <input type="file" id="import_file" accept=".xlsx" required style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; width: 100%; box-sizing: border-box; color: white;">
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" class="btn-primary">Subir y Crear Plantilla</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div class="glassmorphism" style="padding: 20px;">
+                            <h2 id="builder-title" style="margin-bottom: 15px;">Crear Plantilla Manualmente</h2>
+                            <form id="form-builder-plantilla" onsubmit="event.preventDefault();">
+                                <input type="hidden" id="builder_plantilla_id">
+                                <div class="form-group">
+                                    <label>Nombre de la Plantilla</label>
+                                    <input type="text" id="builder_nombre" placeholder="Ej. Auditoría Diaria de Maquinaria" required>
+                                </div>
+                                <div id="builder-categories" style="margin-bottom: 20px;">
+                                    <!-- Dynamic categories for builder -->
+                                </div>
+                                <div style="display: flex; gap: 10px;">
+                                    <button type="button" class="btn-secondary" onclick="addBuilderCategory()">+ Agregar Categoría (Nivel)</button>
+                                </div>
+                                <hr style="margin: 20px 0; border-color: #444;">
+                                <div class="form-actions" style="display: flex; gap: 10px;">
+                                    <button type="button" id="btn-builder-save" class="btn-primary" onclick="guardarPlantilla()">Guardar Nueva Plantilla</button>
+                                    <button type="button" id="btn-builder-cancel" class="btn-secondary" style="display: none; background-color: #7f8c8d; color: white;" onclick="cancelarEdicionPlantilla()">Cancelar Edición</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Reportes Section -->
+                <section id="reportes" class="content-section">
+                    <div class="glassmorphism" style="padding: 20px; margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; width: 100%; max-width: 100%;">
+                        <div class="form-group" style="margin: 0; min-width: 200px; display: none;">
+                            <label>Empresa</label>
+                            <select id="filtro_empresa" onchange="actualizarFiltroObras(); cargarGraficos();">
+                                <option value="">Todas las Empresas</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Obra / Sucursal</label>
+                            <select id="filtro_obra" onchange="actualizarFiltroPrevencionistas(); cargarGraficos();">
+                                <option value="">Todas las Obras</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Plantilla de Auditoría</label>
+                            <select id="filtro_plantilla" onchange="cargarGraficos();">
+                                <option value="">Todas las Plantillas</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Prevencionista</label>
+                            <select id="filtro_prevencionista" onchange="cargarGraficos();">
+                                <option value="">Todos los Prevencionistas</option>
+                            </select>
+                        </div>
+                                                <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Año de Auditoría</label>
+                            <select id="filtro_anio" onchange="cargarGraficos();">
+                                <option value="">Todos los Años</option>
+                                <option value="2024">2024</option>
+                                <option value="2025">2025</option>
+                                <option value="2026">2026</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Mes de Auditoría</label>
+                            <select id="filtro_mes" onchange="cargarGraficos();">
+                                <option value="">Todos los Meses</option>
+                                <option value="01">Enero</option>
+                                <option value="02">Febrero</option>
+                                <option value="03">Marzo</option>
+                                <option value="04">Abril</option>
+                                <option value="05">Mayo</option>
+                                <option value="06">Junio</option>
+                                <option value="07">Julio</option>
+                                <option value="08">Agosto</option>
+                                <option value="09">Septiembre</option>
+                                <option value="10">Octubre</option>
+                                <option value="11">Noviembre</option>
+                                <option value="12">Diciembre</option>
+                            </select>
+                        </div>
+                        <button class="btn-primary" onclick="cargarGraficos()" style="height: 40px;">Actualizar Gráficos</button>
+                    </div>
+
+                    <div class="section-header">
+                        <h1>Reportes y Estadísticas (SST)</h1>
+                    </div>
+
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: stretch; width: 100%;">
+                        <div class="glassmorphism" style="flex: 1; padding: 20px; min-width: 300px; max-width: 500px; text-align: center;">
+                            <h3>Porcentaje de Cumplimiento General</h3>
+                            <div style="position: relative; height: 320px; width: 100%;">
+                                <canvas id="chartCumplimiento"></canvas>
+                            </div>
+                        </div>
+                        <div class="glassmorphism" style="flex: 1; padding: 20px; min-width: 300px; text-align: center;">
+                            <h3>Cumplimiento General por Mes</h3>
+                            <div style="position: relative; height: 320px; width: 100%;">
+                                <canvas id="chartCumplimientoPorMes"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráfico de Cumplimiento por Nivel -->
+                    <div class="glassmorphism" style="margin-top: 20px; padding: 25px; width: 100%; max-width: 100%;">
+                        <h3 style="margin-bottom: 20px; color: var(--primary-color);">Cumplimiento por Nivel (Categoría)</h3>
+                        <div style="position: relative; height: 680px; width: 100%;">
+                            <canvas id="chartCumplimientoNiveles"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Gráfico de Planes de Acción -->
+                    <div class="glassmorphism" style="margin-top: 20px; padding: 25px; width: 100%; max-width: 100%;">
+                        <h3 style="margin-bottom: 20px; color: var(--primary-color);">Planes de Acción Abiertos por Obra</h3>
+                        <div style="position: relative; height: 400px; width: 100%;">
+                            <canvas id="chartPlanesAccionObra"></canvas>
+                        </div>
+                    <!-- Tabla de Auditorías Pendientes de Cierre -->
+                    <div class="glassmorphism" style="margin-top: 20px; padding: 25px; width: 100%; max-width: 100%;">
+                        <h3 style="margin-bottom: 8px; color: #e74c3c;">⚠️ Auditorías con Planes de Acción Sin Comprometer</h3>
+                        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 16px;">
+                            Auditorías cerradas por el Gerente/Coordinador de Prevención que aún tienen preguntas "No Cumple" sin plan comprometido. Ordenadas por urgencia.
+                        </p>
+                        <div style="overflow-x: auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Obra</th>
+                                        <th>Plantilla</th>
+                                        <th>Fecha Cierre</th>
+                                        <th>Plazo (horas)</th>
+                                        <th>Vence el</th>
+                                        <th>Preguntas sin Plan</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-pendientes-cierre">
+                                    <!-- Loaded via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                </section>
+                
+                <section id="epp" class="content-section">
+                    <div class="section-header">
+                        <h1>Gestión de EPP (Equipos de Protección Personal)</h1>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn-secondary" onclick="mostrarModalNuevoEppItem()">+ Crear/Ajustar EPP</button>
+                            <button class="btn-primary" onclick="mostrarModalEntregarEpp()">Entregar EPP a Trabajador</button>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px;">
+                        <!-- EPP Stock -->
+                        <div class="table-container" style="flex: 1; min-width: 300px; padding: 20px; background: var(--bg-card); border-radius: 16px;">
+                            <h3 style="margin-bottom: 15px; color: var(--primary-color);">Stock Disponible</h3>
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Equipo de Protección</th>
+                                        <th>Cantidad</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-epp-stock">
+                                    <!-- Loaded via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- EPP Deliveries -->
+                        <div class="table-container" style="flex: 2; min-width: 500px; padding: 20px; background: var(--bg-card); border-radius: 16px;">
+                            <h3 style="margin-bottom: 15px; color: var(--primary-color);">Historial de Entregas</h3>
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>RUT</th>
+                                        <th>Trabajador</th>
+                                        <th>Descripción (Item)</th>
+                                        <th>Estado Firma</th>
+                                        <th>Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-epp-entregas">
+                                    <!-- Loaded via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="karin" class="content-section">
+                    <div class="section-header">
+                        <h1>Denuncias Ley Karin (Canal de Denuncias)</h1>
+                        <button class="btn-primary" onclick="mostrarModalNuevaDenuncia()">+ Registrar Denuncia</button>
+                    </div>
+
+                    <div class="table-container" style="background: var(--bg-card); border-radius: 16px; padding: 20px; margin-top: 20px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Denunciante</th>
+                                    <th>Denunciado</th>
+                                    <th>Descripción</th>
+                                    <th>Plazo Legal (30d)</th>
+                                    <th>Estado</th>
+                                    <th>Cambiar Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-denuncias-karin">
+                                <!-- Loaded via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="planaccion" class="content-section">
+                    <div class="section-header">
+                        <h1>Planes de Acción</h1>
+                    </div>
+                    
+                    <!-- Filtros de Planes de Acción -->
+                    <div class="glassmorphism" style="padding: 20px; margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; width: 100%; max-width: 100%;">
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Empresa</label>
+                            <select id="filtro_empresa_planes" onchange="actualizarFiltroObrasPlanes(); loadPlanesAccion();">
+                                <option value="">Todas las Empresas</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Obra / Sucursal</label>
+                            <select id="filtro_obra_planes" onchange="actualizarFiltroPrevencionistasPlanes(); loadPlanesAccion();">
+                                <option value="">Todas las Obras</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Plantilla de Auditoría</label>
+                            <select id="filtro_plantilla_planes" onchange="loadPlanesAccion();">
+                                <option value="">Todas las Plantillas</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Prevencionista</label>
+                            <select id="filtro_prevencionista_planes" onchange="loadPlanesAccion();">
+                                <option value="">Todos los Prevencionistas</option>
+                            </select>
+                        </div>
+                                                <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Año de Auditoría</label>
+                            <select id="filtro_anio" onchange="cargarGraficos();">
+                                <option value="">Todos los Años</option>
+                                <option value="2024">2024</option>
+                                <option value="2025">2025</option>
+                                <option value="2026">2026</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Mes de Auditoría</label>
+                            <select id="filtro_mes_planes" onchange="loadPlanesAccion();">
+                                <option value="">Todos los Meses</option>
+                                <option value="01">Enero</option>
+                                <option value="02">Febrero</option>
+                                <option value="03">Marzo</option>
+                                <option value="04">Abril</option>
+                                <option value="05">Mayo</option>
+                                <option value="06">Junio</option>
+                                <option value="07">Julio</option>
+                                <option value="08">Agosto</option>
+                                <option value="09">Septiembre</option>
+                                <option value="10">Octubre</option>
+                                <option value="11">Noviembre</option>
+                                <option value="12">Diciembre</option>
+                            </select>
+                        </div>
+                        <button class="btn-primary" onclick="loadPlanesAccion()" style="height: 40px;">Actualizar</button>
+                    </div>
+
+                    <!-- Gantt Chart Container -->
+                    <div class="glassmorphism" style="padding: 20px; margin-bottom: 20px; width: 100%;">
+                        <h3 style="color: var(--primary-color); margin-bottom: 5px;">Carta Gantt (Planes Abiertos)</h3>
+                        <p style="font-size:0.8rem;color:#a0aec0;margin-bottom:15px;">Muestra solo planes abiertos con fecha de implementación definida, agrupados por obra. La barra indica el tiempo restante hasta el plazo.</p>
+                        <div id="chart_div_gantt" style="width: 100%; min-height: 200px; overflow-x: auto; border-radius: 8px;"></div>
+                    </div>
+
+                    <div class="table-container" style="background: var(--bg-card); border-radius: 16px; padding: 20px; margin-top: 20px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha Auditoría</th>
+                                    <th>Obra</th>
+                                    <th>Pregunta</th>
+                                    <th>Plan de Acción</th>
+                                    <th>Fecha Plazo</th>
+                                    <th>Estado</th>
+                                    <th>Días Restantes</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-planes-accion">
+                                <!-- Loaded via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Reportabilidad Mensual Section -->
+                <section id="reportabilidad" class="content-section">
+                    <div class="section-header">
+                        <h1>Reportabilidad Mensual</h1>
+                        <button class="btn-primary" onclick="descargarReporteMensualPDF()">Descargar PDF</button>
+                    </div>
+                    
+                    <!-- Formulario de Ingreso -->
+                    <div class="glassmorphism" style="padding: 20px; margin-bottom: 20px; width: 100%; max-width: 100%;">
+                        <h3 style="color: var(--primary-color); margin-bottom: 15px;">Ingreso de Datos del Mes</h3>
+                        <form id="form-reportabilidad" style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+                            
+                            <!-- Contexto del reporte (Empresa, Obra, Año, Mes) -->
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                                <label>Empresa</label>
+                                <select id="filtro_empresa_rep" onchange="actualizarFiltrosReportabilidad(); loadReportabilidad();" required>
+                                    <option value="">Seleccione Empresa...</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                                <label>Obra</label>
+                                <select id="filtro_obra_rep" onchange="loadReportabilidad();" required>
+                                    <option value="">Seleccione Obra...</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 100px;">
+                                <label>Año</label>
+                                <select id="filtro_anio_rep" onchange="loadReportabilidad();" required>
+                                    <option value="2023">2023</option>
+                                    <option value="2024">2024</option>
+                                    <option value="2025" selected>2025</option>
+                                    <option value="2026">2026</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 120px;">
+                                <label>Mes</label>
+                                <select id="filtro_mes_rep" onchange="loadReportabilidad();" required>
+                                    <option value="01">Enero</option>
+                                    <option value="02">Febrero</option>
+                                    <option value="03">Marzo</option>
+                                    <option value="04">Abril</option>
+                                    <option value="05">Mayo</option>
+                                    <option value="06">Junio</option>
+                                    <option value="07">Julio</option>
+                                    <option value="08">Agosto</option>
+                                    <option value="09">Septiembre</option>
+                                    <option value="10">Octubre</option>
+                                    <option value="11">Noviembre</option>
+                                    <option value="12">Diciembre</option>
+                                </select>
+                            </div>
+
+                            <div style="flex-basis: 100%; height: 0;"></div> <!-- Break to next line -->
+
+                            <!-- Datos Trabajadores -->
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                                <label>Hombres</label>
+                                <input type="number" id="rep_hombres" min="0" value="0" oninput="calcularTotalTrabajadoresRep()">
+                            </div>
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                                <label>Mujeres</label>
+                                <input type="number" id="rep_mujeres" min="0" value="0" oninput="calcularTotalTrabajadoresRep()">
+                            </div>
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                                <label>Total Trabajadores</label>
+                                <input type="number" id="rep_total" min="0" value="0" readonly style="background: rgba(255,255,255,0.1); cursor: not-allowed;">
+                            </div>
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                                <label title="N° trabajadores con vigilancia médica">Trabajadores en Vig. Médica</label>
+                                <input type="number" id="rep_trabajadores_vigilancia" min="0" value="0">
+                            </div>
+
+                            <div style="flex-basis: 100%; height: 0;"></div> <!-- Break to next line -->
+
+                            <!-- Datos Siniestralidad -->
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                                <label>N° de Horas Trabajadas</label>
+                                <input type="number" id="rep_horas_trabajadas" min="0" step="0.1" value="0">
+                            </div>
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                                <label>N° de EP</label>
+                                <input type="number" id="rep_enfermedades_profesionales" min="0" value="0">
+                            </div>
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                                <label>N° Jornadas Perdidas EP</label>
+                                <input type="number" id="rep_jornadas_perdidas_ep" min="0" value="0">
+                            </div>
+
+                            <div style="flex-basis: 100%; height: 0;"></div> <!-- Break to next line -->
+
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                                <label>N° de Accidentes con Baja</label>
+                                <input type="number" id="rep_accidentes_con_baja" min="0" value="0">
+                            </div>
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                                <label>N° Jornadas Perdidas</label>
+                                <input type="number" id="rep_jornadas_perdidas" min="0" value="0">
+                            </div>
+
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 200px; display: flex; align-items: flex-end;">
+                                <button type="submit" class="btn-primary" style="width: 100%; height: 42px;">Guardar Registro</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Tabla de Historial -->
+                    <div class="glassmorphism" style="padding: 20px; width: 100%; max-width: 100%;">
+                        <h3 style="color: var(--primary-color); margin-bottom: 15px;">Historial de Registros</h3>
+                        <div style="overflow-x: auto;">
+                            <table class="data-table" style="font-size: 0.85rem;">
+                                <thead>
+                                    <tr>
+                                        <th>Año</th>
+                                        <th>Mes</th>
+                                        <th>Total Trabajadores</th>
+                                        <th>Vig. Médica</th>
+                                        <th>Horas Trab.</th>
+                                        <th>N° EP</th>
+                                        <th>Jorn. Perd. EP</th>
+                                        <th>Accid. (Con Baja)</th>
+                                        <th>Jorn. Perd.</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-reportabilidad">
+                                    <!-- Loaded via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Gráficos Reportabilidad Section -->
+                <section id="graficos-reportabilidad" class="content-section">
+                    <div class="glassmorphism" style="padding: 20px; margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; width: 100%; max-width: 100%;">
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Empresa</label>
+                            <select id="filtro_empresa_gr" onchange="actualizarFiltroObrasGr()">
+                                <option value="">Todas las Empresas</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Obra</label>
+                            <select id="filtro_obra_gr" onchange="cargarGraficosReportabilidad()">
+                                <option value="">Todas las Obras</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Año</label>
+                            <select id="filtro_anio_gr" onchange="cargarGraficosReportabilidad()">
+                                <option value="">Todos los Años</option>
+                                <option value="2023">2023</option>
+                                <option value="2024">2024</option>
+                                <option value="2025" selected>2025</option>
+                                <option value="2026">2026</option>
+                            </select>
+                        </div>
+                        <button class="btn-primary" onclick="cargarGraficosReportabilidad()" style="height: 40px;">Actualizar Gráficos</button>
+                    </div>
+
+                    <div class="section-header">
+                        <h1>Gráficos Reportabilidad Mensual</h1>
+                    </div>
+
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: stretch; width: 100%; margin-bottom: 20px;">
+                        <div class="glassmorphism" style="flex: 1; padding: 20px; min-width: 300px; text-align: center;">
+                            <h3>Evolución de Trabajadores (Total vs Vigilancia Médica)</h3>
+                            <div style="position: relative; height: 320px; width: 100%;">
+                                <canvas id="chartEvolucionTrabajadores"></canvas>
+                            </div>
+                        </div>
+                        <div class="glassmorphism" style="flex: 1; padding: 20px; min-width: 300px; text-align: center;">
+                            <h3>Siniestralidad (Accidentes, EP y Jornadas Perdidas)</h3>
+                            <div style="position: relative; height: 320px; width: 100%;">
+                                <canvas id="chartSiniestralidad"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: stretch; width: 100%; margin-bottom: 20px;">
+                        <div class="glassmorphism" style="flex: 1; padding: 20px; min-width: 300px; text-align: center;">
+                            <h3>Distribución de Género Promedio</h3>
+                            <div style="position: relative; height: 320px; width: 100%; display: flex; justify-content: center;">
+                                <canvas id="chartGenero" style="max-height: 320px;"></canvas>
+                            </div>
+                        </div>
+                        <div class="glassmorphism" style="flex: 1; padding: 20px; min-width: 300px; text-align: center;">
+                            <h3>Evolución de Horas Trabajadas</h3>
+                            <div style="position: relative; height: 320px; width: 100%;">
+                                <canvas id="chartHoras"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tablas de Resumen Anual -->
+                    <div class="glassmorphism" style="margin-top: 20px; padding: 25px; width: 100%; max-width: 100%;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 style="margin: 0; color: var(--primary-color);">Resumen Anual (Julio a Junio)</h3>
+                            <button class="btn-primary" onclick="exportarResumenAnualExcel()" style="padding: 8px 16px; font-size: 0.9rem;"><i class="fas fa-file-excel"></i> Exportar a Excel</button>
+                        </div>
+                        <div style="display: flex; gap: 20px; flex-wrap: wrap;" id="resumen-anual-container">
+                            
+                            <div style="flex: 1; min-width: 250px; overflow-x: auto;">
+                                <h4 style="margin-bottom: 10px; color: var(--text-color); font-size: 0.95rem;">Año 1 (Jul 2024 - Jun 2025)</h4>
+                                <table class="data-table" style="font-size: 0.8rem;">
+                                    <thead>
+                                        <tr>
+                                            <th>Mes-Año</th>
+                                            <th>Trabajadores</th>
+                                            <th>Días Perdidos</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabla-resumen-anio1">
+                                        <tr><td>-</td><td>-</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div style="flex: 1; min-width: 250px; overflow-x: auto;">
+                                <h4 style="margin-bottom: 10px; color: var(--text-color); font-size: 0.95rem;">Año 2 (Jul 2025 - Jun 2026)</h4>
+                                <table class="data-table" style="font-size: 0.8rem;">
+                                    <thead>
+                                        <tr>
+                                            <th>Mes-Año</th>
+                                            <th>Trabajadores</th>
+                                            <th>Días Perdidos</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabla-resumen-anio2">
+                                        <tr><td>-</td><td>-</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div style="flex: 1; min-width: 250px; overflow-x: auto;">
+                                <h4 style="margin-bottom: 10px; color: var(--text-color); font-size: 0.95rem;">Año 3 (Jul 2026 - Jun 2027)</h4>
+                                <table class="data-table" style="font-size: 0.8rem;">
+                                    <thead>
+                                        <tr>
+                                            <th>Mes-Año</th>
+                                            <th>Trabajadores</th>
+                                            <th>Días Perdidos</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabla-resumen-anio3">
+                                        <tr><td>-</td><td>-</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                        </div>
+                    </div>
+
+                </section>
+
+                <!-- Maquinaria en Obra Section -->
+                <section id="maquinaria-obra" class="content-section">
+                    <div class="section-header">
+                        <h1>Maquinaria en Obra</h1>
+                    </div>
+                    <div class="glassmorphism" style="padding: 20px; margin-bottom: 20px;">
+                        <form id="form-maquinaria" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div class="form-group" style="display: none;">
+                                <label>Empresa</label>
+                                <select id="maq-empresa">
+                                    <option value="">Seleccione Empresa...</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="display: none;">
+                                <label>Obra</label>
+                                <select id="maq-obra">
+                                    <option value="">Seleccione Obra...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Maquinaria</label>
+                                <input type="text" id="maq-nombre" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Marca</label>
+                                <input type="text" id="maq-marca">
+                            </div>
+                            <div class="form-group">
+                                <label>Modelo</label>
+                                <input type="text" id="maq-modelo">
+                            </div>
+                            <div class="form-group">
+                                <label>Patente/Código</label>
+                                <input type="text" id="maq-patente">
+                            </div>
+                            <div class="form-group" style="display: flex; align-items: center; gap: 10px; padding-top: 25px; grid-column: 1 / -1;">
+                                <input type="checkbox" id="maq-permiso" style="width: auto; margin: 0;" onchange="toggleFechasMaquinaria()">
+                                <label for="maq-permiso" style="margin: 0; padding: 0;">Requiere Permiso Circular</label>
+                            </div>
+                            
+                            <div id="maq-fechas-container" style="display: none; grid-column: 1 / -1; flex-wrap: wrap; gap: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; margin-top: 5px;">
+                                <div class="form-group" style="flex: 1; min-width: 180px;">
+                                    <label>Vig. Permiso Circulación</label>
+                                    <input type="date" id="maq-vigencia-permiso">
+                                </div>
+                                <div class="form-group" style="flex: 1; min-width: 180px;">
+                                    <label>Vig. Licencia Conducir</label>
+                                    <input type="date" id="maq-vigencia-licencia">
+                                </div>
+                                <div class="form-group" style="flex: 1; min-width: 180px;">
+                                    <label>Vigencia Examen</label>
+                                    <input type="date" id="maq-vigencia-examen">
+                                </div>
+                            </div>
+
+                            <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-top: 10px;">
+                                <button type="button" class="btn-primary" onclick="guardarMaquinaria(event)">Guardar Maquinaria</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Maquinaria</th>
+                                    <th>Marca</th>
+                                    <th>Modelo</th>
+                                    <th>Patente/Cód.</th>
+                                    <th>Permiso Circ.</th>
+                                    <th>Vigencia Permiso</th>
+                                    <th>Vigencia Licencia</th>
+                                    <th>Vigencia Examen</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-maquinaria">
+                                <!-- Datos cargados por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Nuevo Trabajador -->
+    <div id="modal-nuevo-trabajador" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Registrar Trabajador</h2>
+            <form id="form-trabajador">
+                <div class="form-group">
+                    <label>RUT</label>
+                    <input type="text" id="rut" required placeholder="Ej: 12.345.678-9">
+                </div>
+                <div class="form-group">
+                    <label>Nombre Completo</label>
+                    <input type="text" id="nombre" required>
+                </div>
+                <div class="form-group">
+                    <label>Cargo</label>
+                    <input type="text" id="cargo" required>
+                </div>
+                <div class="form-group">
+                    <label>Proyecto</label>
+                    <select id="proyecto_id" required>
+                        <!-- Loaded via JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Correo Electrónico</label>
+                    <input type="email" id="email" placeholder="Ej: pedro@ejemplo.com">
+                </div>
+                <div class="form-group">
+                    <label>Teléfono Celular</label>
+                    <input type="text" id="telefono" placeholder="Ej: +56911223344">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModalTrabajador()">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+                    
+
+                    <!-- Modales Mantenedores -->
+    
+    <!-- Modal Plazo -->
+    <div id="modal-plazo" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Definir Plazo de Cierre</h2>
+            <form id="form-plazo" onsubmit="event.preventDefault(); guardarPlazoCierre();">
+                <p style="color: #ccc; margin-bottom: 15px; font-size: 0.9rem;">Empresa Activa: <span id="lbl-plazo-empresa-nombre" style="font-weight: bold; color: white;">-</span></p>
+                <div class="form-group">
+                    <label>Horas para el cierre</label>
+                    <input type="number" id="c_plazo_horas" required placeholder="Ej: 48" min="1">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-plazo')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Plazo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Modal Correo Terminada -->
+    <div id="modal-correo-terminada" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Nuevo Destinatario (Terminada)</h2>
+            <form id="form-correo-terminada" onsubmit="event.preventDefault(); guardarCorreoTerminada();">
+                <p style="color: #ccc; margin-bottom: 15px; font-size: 0.9rem;">Empresa Activa: <span id="lbl-term-empresa-nombre" style="font-weight: bold; color: white;">-</span></p>
+                <div class="form-group">
+                    <label>Rol a Notificar</label>
+                    <select id="ct_nombre" required>
+                        <option value="">-- Seleccione un rol --</option>
+                        <option value="Gerente">Gerente</option>
+                        <option value="Gerente Prevencion">Gerente Prevencion</option>
+                        <option value="Administrador de Obra">Administrador de Obra</option>
+                        <option value="Prevencionista en Terreno">Prevencionista en Terreno</option>
+                        <option value="Coordinador de Prevencion">Coordinador de Prevencion</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-correo-terminada')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Correo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Modal Correo Cerrada -->
+    <div id="modal-correo-cerrada" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Nuevo Destinatario (Cerrada)</h2>
+            <form id="form-correo-cerrada" onsubmit="event.preventDefault(); guardarCorreoCerrada();">
+                <p style="color: #ccc; margin-bottom: 15px; font-size: 0.9rem;">Empresa Activa: <span id="lbl-cerr-empresa-nombre" style="font-weight: bold; color: white;">-</span></p>
+                <div class="form-group">
+                    <label>Rol a Notificar</label>
+                    <select id="cc_nombre" required>
+                        <option value="">-- Seleccione un rol --</option>
+                        <option value="Gerente">Gerente</option>
+                        <option value="Gerente Prevencion">Gerente Prevencion</option>
+                        <option value="Administrador de Obra">Administrador de Obra</option>
+                        <option value="Prevencionista en Terreno">Prevencionista en Terreno</option>
+                        <option value="Coordinador de Prevencion">Coordinador de Prevencion</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-correo-cerrada')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Correo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    
+    <!-- Modal Registrar Pago -->
+    <div id="modal-pago" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Registrar Pago de Factura</h2>
+            <form id="form-pago" onsubmit="event.preventDefault(); guardarPago();">
+                <p style="color: #ccc; margin-bottom: 15px; font-size: 0.9rem;">Empresa: <span id="lbl-pago-empresa-nombre" style="font-weight: bold; color: white;">-</span></p>
+                <div class="form-group">
+                    <label>Número de Factura</label>
+                    <input type="text" id="p_numero_factura" required placeholder="Ej: 14502">
+                </div>
+                <div class="form-group">
+                    <label>Monto Pagado ($)</label>
+                    <input type="number" id="p_monto" required placeholder="Ej: 150000">
+                </div>
+                <div class="form-group">
+                    <label>Fecha de Pago</label>
+                    <input type="date" id="p_fecha_pago" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-pago')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Pago</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Empresa -->
+    <div id="modal-empresa" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2 id="modal-empresa-title">Nueva Empresa</h2>
+            <form id="form-empresa">
+                <input type="hidden" id="edit_empresa_id">
+                <div class="form-group"><input type="text" id="e_rut" required placeholder="RUT"></div>
+                <div class="form-group"><input type="text" id="e_nombre" required placeholder="Nombre Empresa"></div>
+                <div class="form-group">
+                    <label>Vigencia del Contrato</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="date" id="e_fecha_inicio" required style="flex:1;">
+                        <input type="date" id="e_fecha_fin" required style="flex:1;">
+                    </div>
+                </div>
+                <div class="form-group"><input type="email" id="e_correo" placeholder="Correo Emisor (Gmail) - Opcional"></div>
+                <div class="form-group"><input type="password" id="e_contrasena" placeholder="Contraseña de Aplicación - Opcional"></div>
+                <div class="form-group">
+                    <label>Logo de la Empresa (opcional)</label>
+                    <input type="file" id="e_logo" accept="image/jpeg, image/jpg, image/png">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-empresa')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Obra -->
+    <div id="modal-obra" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Nueva Obra</h2>
+            <form id="form-obra">
+                <div class="form-group">
+                    <label>Empresa</label>
+                    <select id="o_empresa_id" required></select>
+                </div>
+                <div class="form-group"><input type="text" id="o_nombre" required placeholder="Nombre Obra"></div>
+                <div class="form-group"><input type="text" id="o_ubicacion" required placeholder="Ubicación"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-obra')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Gerente -->
+    <div id="modal-gerente" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Nuevo Gerente</h2>
+            <form id="form-gerente">
+                <div class="form-group">
+                    <label>Empresa</label>
+                    <select id="g_empresa_id" required></select>
+                </div>
+                <div class="form-group"><input type="text" id="g_rut" required placeholder="RUT"></div>
+                <div class="form-group"><input type="text" id="g_nombre" required placeholder="Nombre Completo"></div>
+                <div class="form-group"><input type="email" id="g_correo" required placeholder="Correo"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-gerente')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Gerente Prevencion -->
+    <div id="modal-gerente-prevencion" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Nuevo Gerente de Prevención</h2>
+            <form id="form-gerente-prevencion">
+                <div class="form-group">
+                    <label>Empresa</label>
+                    <select id="gp_empresa_id" required></select>
+                </div>
+                <div class="form-group"><input type="text" id="gp_rut" required placeholder="RUT"></div>
+                <div class="form-group"><input type="text" id="gp_nombre" required placeholder="Nombre Completo"></div>
+                <div class="form-group"><input type="email" id="gp_correo" required placeholder="Correo"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-gerente-prevencion')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Prevencionista -->
+    <div id="modal-prevencionista" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Nuevo Prevencionista</h2>
+            <form id="form-prevencionista">
+                <div class="form-group">
+                    <label>Obra</label>
+                    <select id="p_obra_id" required></select>
+                </div>
+                <div class="form-group"><input type="text" id="p_rut" required placeholder="RUT"></div>
+                <div class="form-group"><input type="text" id="p_nombre" required placeholder="Nombre Completo"></div>
+                <div class="form-group"><input type="email" id="p_correo" required placeholder="Correo"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-prevencionista')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Jefe de Obra -->
+    <div id="modal-jefe-obra" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Nuevo Administrador de Obra</h2>
+            <form id="form-jefe-obra">
+                <div class="form-group">
+                    <label>Obra</label>
+                    <select id="jo_obra_id" required></select>
+                </div>
+                <div class="form-group"><input type="text" id="jo_rut" required placeholder="RUT"></div>
+                <div class="form-group"><input type="text" id="jo_nombre" required placeholder="Nombre Completo"></div>
+                <div class="form-group"><input type="email" id="jo_correo" required placeholder="Correo"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-jefe-obra')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Coordinador Prevencion -->
+    <div id="modal-coordinador-prevencion" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Nuevo Coordinador de Prevención</h2>
+            <form id="form-coordinador-prevencion">
+                <div class="form-group">
+                    <label>Obra(s) a cargo (Ctrl/Cmd para múltiple)</label>
+                    <select id="cp_obra_id" multiple required style="height: 100px;"></select>
+                </div>
+                <div class="form-group"><input type="text" id="cp_rut" required placeholder="RUT"></div>
+                <div class="form-group"><input type="text" id="cp_nombre" required placeholder="Nombre Completo"></div>
+                <div class="form-group"><input type="email" id="cp_correo" required placeholder="Correo"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-coordinador-prevencion')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Nuevo EPP -->
+    <div id="modal-nuevo-epp" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Crear o Ajustar EPP</h2>
+            <form id="form-nuevo-epp">
+                <div class="form-group">
+                    <label>Nombre del Equipo</label>
+                    <input type="text" id="epp_item" required placeholder="Ej. Lentes de Seguridad">
+                </div>
+                <div class="form-group">
+                    <label>Cantidad a Agregar</label>
+                    <input type="number" id="epp_cantidad" required min="1" placeholder="Ej. 10">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-nuevo-epp')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Stock</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Entregar EPP -->
+    <div id="modal-entregar-epp" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Entregar EPP a Trabajador</h2>
+            <form id="form-entregar-epp">
+                <div class="form-group">
+                    <label>Trabajador Destinatario</label>
+                    <select id="epp_trabajador_id" required>
+                        <!-- Loaded via JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Seleccionar EPP</label>
+                    <select id="epp_entrega_item" required>
+                        <!-- Loaded via JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Método de Envío para Firma OTP</label>
+                    <select id="epp_entrega_metodo" required>
+                        <option value="email">Correo Electrónico</option>
+                        <option value="telefono">Teléfono Celular (SMS/Simulado)</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-entregar-epp')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Solicitar Firma OTP</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Nueva Denuncia Ley Karin -->
+    <div id="modal-nueva-denuncia" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Registrar Denuncia - Ley Karin</h2>
+            <form id="form-nueva-denuncia">
+                <div class="form-group">
+                    <label>Denunciante (Escriba 'Anónimo' si lo desea)</label>
+                    <input type="text" id="karin_denunciante" required placeholder="Ej. Juan Pérez o Anónimo">
+                </div>
+                <div class="form-group">
+                    <label>Nombre del Denunciado (Si lo conoce)</label>
+                    <input type="text" id="karin_denunciado" required placeholder="Ej. Administrador de Obra o Compañero">
+                </div>
+                <div class="form-group">
+                    <label>Descripción de los Hechos</label>
+                    <textarea id="karin_descripcion" required placeholder="Describa brevemente la situación de acoso o violencia..." style="width: 100%; height: 100px; padding: 12px; background-color: var(--bg-dark); border: 1px solid var(--border-color); color: white; border-radius: 8px; outline: none;"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-nueva-denuncia')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Ingresar Denuncia</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Firma OTP -->
+    <div id="modal-firma-otp" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Firma Electrónica Simple (OTP)</h2>
+            <p id="otp-instruction" style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">
+                Se ha enviado un código de validación al trabajador. Por favor, ingréselo a continuación para confirmar la firma.
+            </p>
+            <form id="form-firma-otp">
+                <input type="hidden" id="otp_entrega_id">
+                <div class="form-group">
+                    <label>Código de Verificación (6 dígitos)</label>
+                    <input type="text" id="otp_codigo" required placeholder="Ej: 123456" maxlength="6" style="text-align: center; font-size: 1.5rem; letter-spacing: 5px; color: var(--primary-color);">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-firma-otp')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Validar y Firmar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Previsualización de Auditoría -->
+    <div id="modal-previsualizacion" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 800px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
+            <h2 style="margin-bottom: 10px; color: var(--primary-color);">Previsualización de Auditoría</h2>
+            
+            <div id="previsualizacion-info" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; font-size: 0.95rem;">
+                <!-- Dynamically loaded metadata: Obra, Plantilla, Fecha Inicio, Fecha Fin, Duración -->
+            </div>
+            
+            <div id="previsualizacion-respuestas-container" style="flex-grow: 1; overflow-y: auto; margin-bottom: 20px; padding-right: 5px;">
+                <!-- Tables/groups of responses by category -->
+            </div>
+            
+            <div class="form-actions" style="margin-top: auto; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 10px; flex-wrap: wrap;">
+                <button type="button" class="btn-secondary" onclick="cerrarModal('modal-previsualizacion')">Volver a Editar</button>
+                <button type="button" class="btn-secondary" style="background-color: #2980b9; color: white;" onclick="descargarAuditoriaPDF()">Descargar PDF</button>
+                <button type="button" class="btn-primary" onclick="confirmarGuardadoDefinitivo()">Confirmar Guardar Definitivo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detalle Gráfico -->
+    <div id="modal-detalle-grafico" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 900px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
+            <h2 id="modal-detalle-titulo" style="margin-bottom: 20px; color: var(--primary-color);">Detalle de Respuestas</h2>
+            
+            <div style="flex-grow: 1; overflow-y: auto; padding-right: 5px;">
+                <!-- Grid for charts -->
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 25px;">
+                    <div class="glassmorphism" style="flex: 1; padding: 15px; min-width: 250px; text-align: center; background: rgba(0,0,0,0.2);">
+                        <h4 style="margin-bottom: 10px; color: var(--text-main);">Por Obra / Proyecto</h4>
+                        <div style="position: relative; height: 220px; width: 100%;">
+                            <canvas id="chartDetalleObra"></canvas>
+                        </div>
+                    </div>
+                    <div class="glassmorphism" style="flex: 1; padding: 15px; min-width: 250px; text-align: center; background: rgba(0,0,0,0.2);">
+                        <h4 style="margin-bottom: 10px; color: var(--text-main);">Por Prevencionista</h4>
+                        <div style="position: relative; height: 220px; width: 100%;">
+                            <canvas id="chartDetallePrevencionista"></canvas>
+                        </div>
+                    </div>
+                    <div class="glassmorphism" id="chart-detalle-mes-container" style="flex: 1; padding: 15px; min-width: 250px; text-align: center; background: rgba(0,0,0,0.2); display: none;">
+                        <h4 style="margin-bottom: 10px; color: var(--text-main);">Por Mes</h4>
+                        <div style="position: relative; height: 220px; width: 100%;">
+                            <canvas id="chartDetalleMes"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Table of detailed failures / questions -->
+                <h3 style="margin-bottom: 15px; color: var(--primary-color);" id="modal-detalle-tabla-titulo">Preguntas con "No Cumple"</h3>
+                <div class="table-container" style="background: rgba(0,0,0,0.2); border-radius: 12px; padding: 10px;">
+                    <table class="data-table" style="font-size: 0.9rem;">
+                        <thead>
+                            <tr>
+                                <th style="width: 50%;">Pregunta</th>
+                                <th style="width: 25%;">Obra</th>
+                                <th style="width: 25%;">Observación</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-detalle-preguntas">
+                            <!-- Dynamic details -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="form-actions" style="margin-top: auto; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <button type="button" class="btn-primary" onclick="cerrarModal('modal-detalle-grafico')">Cerrar</button>
+            </div>
+        </div>
+    </div>
+    <!-- Modal Cumplimiento por Obra -->
+    <div id="modal-cumplimiento-obra" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 800px; width: 90%; max-height: 90vh;">
+            <h2 id="titulo-modal-cumplimiento-obra" style="margin-bottom: 20px; color: var(--primary-color);">Cumplimiento por Obra</h2>
+            <div style="background: rgba(0,0,0,0.2); border-radius: 12px; padding: 10px;">
+                <canvas id="chart-cumplimiento-obra"></canvas>
+            </div>
+            <div class="form-actions" style="margin-top: 20px;">
+                <button type="button" class="btn-primary" onclick="document.getElementById('modal-cumplimiento-obra').style.display='none'">Cerrar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Detalle Brecha -->
+    <div id="modal-detalle-brecha" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 900px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
+            <h2 style="margin-bottom: 20px; color: var(--primary-color);">Detalle Preguntas "No Cumple"</h2>
+            <div style="flex-grow: 1; overflow-y: auto; padding-right: 5px;">
+                <div class="table-container" style="background: rgba(0,0,0,0.2); border-radius: 12px; padding: 10px;">
+                    <table class="data-table" style="font-size: 0.9rem;">
+                        <thead>
+                            <tr>
+                                <th style="width: 15%;">Auditoría ID</th>
+                                <th style="width: 15%;">Fecha</th>
+                                <th style="width: 35%;">Pregunta</th>
+                                <th style="width: 35%;">Observación</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-detalle-brecha">
+                            <!-- Dynamic details -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="form-actions" style="margin-top: auto; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <button type="button" class="btn-primary" onclick="document.getElementById('modal-detalle-brecha').style.display='none'">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Cierre de Auditoría -->
+    <div id="modal-cierre-auditoria" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;">
+            <h2 style="color: var(--primary-color); margin-bottom: 10px;">Cierre de Auditoría</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">
+                Complete los comentarios y compromisos para formalizar el cierre de esta auditoría.
+            </p>
+            <form id="form-cierre-auditoria">
+                <div class="form-group">
+                    <label>Comentarios / Observaciones</label>
+                    <textarea id="cierre_comentarios" placeholder="Ingrese las observaciones generales o comentarios..." required style="width: 100%; height: 100px; padding: 12px; background-color: var(--bg-dark); border: 1px solid var(--border-color); color: white; border-radius: 8px; outline: none; resize: vertical;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Compromisos</label>
+                    <textarea id="cierre_compromisos" placeholder="Ingrese las medidas correctivas y compromisos establecidos..." required style="width: 100%; height: 100px; padding: 12px; background-color: var(--bg-dark); border: 1px solid var(--border-color); color: white; border-radius: 8px; outline: none; resize: vertical;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Mensaje a Gerencia / Coordinador</label>
+                    <textarea id="correo_gerencia" placeholder="Mensaje informativo indicando que se completaron los planes de acción..." style="width: 100%; height: 60px; padding: 12px; background-color: var(--bg-dark); border: 1px solid var(--border-color); color: white; border-radius: 8px; outline: none; resize: vertical;"></textarea>
+                </div>
+                
+                <div id="cierre-no-cumple-container" style="margin-top: 20px; margin-bottom: 20px; max-height: 40vh; overflow-y: auto;">
+                    <!-- Preguntas No Cumple will be injected here -->
+                </div>
+
+                <div class="form-actions" style="margin-top: 20px;">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-cierre-auditoria')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Cierre</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Editar Plan de Acción -->
+    <div id="modal-editar-plan" class="modal">
+        <div class="modal-content glassmorphism">
+            <h2>Editar Plan de Acción</h2>
+            <form id="form-editar-plan">
+                <input type="hidden" id="edit_plan_id">
+                <div class="form-group">
+                    <label>Plan de Acción</label>
+                    <textarea id="edit_plan_texto" required style="width: 100%; height: 100px; padding: 12px; background-color: var(--bg-dark); border: 1px solid var(--border-color); color: white; border-radius: 8px; outline: none; resize: vertical;"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-editar-plan')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Rechazar Plan -->
+    <div id="modal-rechazar-plan" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 500px; width: 90%;">
+            <h2 style="color: #e74c3c; margin-bottom: 10px;">Rechazar Plan de Acción</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">
+                Ingrese el motivo de la no conformidad para que el prevencionista lo reformule.
+            </p>
+            <form id="form-rechazar-plan">
+                <input type="hidden" id="rechazar_plan_id">
+                <div class="form-group">
+                    <label>Motivo del Rechazo / No Conformidad</label>
+                    <textarea id="rechazo_motivo" required style="width: 100%; height: 100px; padding: 12px; background-color: var(--bg-dark); border: 1px solid var(--border-color); color: white; border-radius: 8px; outline: none; resize: vertical;"></textarea>
+                </div>
+                <div class="form-actions" style="margin-top: 20px;">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-rechazar-plan')">Cancelar</button>
+                    <button type="submit" class="btn-primary" style="background-color: #e74c3c;">Rechazar Plan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Cierre de Plan con Evidencia -->
+    <div id="modal-cierre-evidencia" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 500px; width: 90%;">
+            <h2 style="color: var(--primary-color); margin-bottom: 10px;">Cierre con Evidencia</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">
+                Ingrese el texto de la evidencia y suba un documento respaldatorio (ej. PDF o Imagen).
+            </p>
+            <form id="form-cierre-evidencia">
+                <input type="hidden" id="evidencia_plan_id" />
+                <div class="form-group">
+                    <label>Texto Evidencia</label>
+                    <textarea id="evidencia_texto" required style="width: 100%; height: 80px; padding: 12px; background-color: var(--bg-dark); border: 1px solid var(--border-color); color: white; border-radius: 8px; outline: none; resize: vertical;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Archivo de Respaldo</label>
+                    <input type="file" id="evidencia_file" accept=".pdf,.png,.jpg,.jpeg" required style="width: 100%; padding: 10px; background-color: rgba(0,0,0,0.3); border: 1px dashed var(--border-color); border-radius: 8px; color: white;" />
+                </div>
+                <div class="form-actions" style="margin-top: 20px;">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-cierre-evidencia')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Cierre</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Evidencia Visualizador -->
+    <div id="modal-ver-evidencia" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 600px; width: 90%;">
+            <h2 style="color: var(--primary-color); margin-bottom: 10px;">Evidencia de Cierre</h2>
+            <div class="form-group">
+                <label>Texto Evidencia:</label>
+                <div id="ver_evidencia_texto" style="padding: 12px; background-color: var(--bg-dark); border: 1px solid var(--border-color); color: white; border-radius: 8px; min-height: 50px;"></div>
+            </div>
+            <div class="form-group">
+                <label>Archivo de Respaldo:</label>
+                <a id="ver_evidencia_file" target="_blank" class="btn-primary" style="display: inline-block; text-decoration: none;">📄 Descargar/Ver Archivo</a>
+            </div>
+            <div class="form-actions" style="margin-top: 20px;">
+                <button type="button" class="btn-secondary" onclick="cerrarModal('modal-ver-evidencia')">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Charts -->
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script src="app.js?v=1.1.26"></script>
+
+    <!-- Modal Cambio de Clave Obligatorio -->
+    <div id="modal-cambiar-clave" class="modal" style="z-index: 10000;">
+        <div class="modal-content glassmorphism">
+            <h2>Actualización de Seguridad</h2>
+            <p style="color: #ccc; margin-bottom: 20px; font-size: 0.9rem;">Por motivos de seguridad, debes cambiar tu contraseña inicial antes de continuar.</p>
+            <form id="form-cambiar-clave" onsubmit="event.preventDefault(); guardarNuevaClave();">
+                <input type="hidden" id="cc_rut">
+                <div class="form-group">
+                    <label>Nueva Contrasea</label>
+                    <input type="password" id="cc_nueva" required>
+                </div>
+                <div class="form-group">
+                    <label>Confirmar Nueva Contrasea</label>
+                    <input type="password" id="cc_confirmar" required>
+                </div>
+                <div class="form-actions" style="justify-content: center;">
+                    <button type="submit" class="btn-primary" style="width: 100%;">Actualizar y Entrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Recuperar Clave -->
+    <div id="modal-recuperar-clave" class="modal" style="z-index: 10000;">
+        <div class="modal-content glassmorphism">
+            <h2>Recuperar Contrasea</h2>
+            <p style="color: #ccc; margin-bottom: 20px; font-size: 0.9rem;">Ingresa el correo registrado. Te enviaremos una clave temporal a tu correo electrnico.</p>
+            <form id="form-recuperar-clave" onsubmit="event.preventDefault(); solicitarRecuperacion();">
+                <div class="form-group">
+                    <label>Correo Electrnico</label>
+                    <input type="email" id="rc_correo" required placeholder="tu@correo.com">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="cerrarModal('modal-recuperar-clave')">Cancelar</button>
+                    <button type="submit" class="btn-primary" id="btn-recuperar">Enviar Correo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- Modal Revisar Auditoria antes de Cierre -->
+    <div id="modal-revisar-auditoria" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+            <div id="pdf-content-area" style="padding: 20px; background-color: var(--bg-card); color: var(--text-color); border-radius: 8px;">
+                <h2 style="color: var(--primary-color); margin-bottom: 20px; text-align: center;">Resumen de Auditoría</h2>
+                <div id="review-audit-metadata" style="margin-bottom: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.95rem;">
+                    <!-- Metadata will be injected here -->
+                </div>
+                <hr style="border-color: #444; margin: 20px 0;">
+                <div id="review-audit-questions">
+                    <!-- Questions will be injected here -->
+                </div>
+            </div>
+            
+            <div class="form-actions" style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn-secondary" onclick="cerrarModal('modal-revisar-auditoria')">Volver al Formulario</button>
+                <button type="button" class="btn-secondary" style="background-color: #27ae60; color: white;" onclick="descargarPDFAuditoria()">Descargar PDF</button>
+                <button type="button" class="btn-primary" id="btn-proceder-firmar" onclick="abrirFirmaAuditoria()">Proceder a Firmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Aprobar Cierre de Auditoria -->
+    <div id="modal-aprobar-cierre" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 500px;">
+            <h2 style="color: var(--primary-color); margin-bottom: 20px;">Firma de Cierre Definitivo</h2>
+            <p style="margin-bottom: 20px; font-size: 0.9rem;">Para cerrar la auditoría, se requieren las firmas electrónicas (contraseñas) de los responsables.</p>
+            
+            <div class="form-group">
+                <label>RUT Coordinador / Gerente</label>
+                <input type="text" id="firma_coord_rut" placeholder="Ej: 11222333-4">
+            </div>
+            <div class="form-group">
+                <label>Contraseña Coordinador / Gerente</label>
+                <input type="password" id="firma_coord_clave" placeholder="Contraseña">
+            </div>
+            <hr style="border-color: #444; margin: 20px 0;">
+            <div class="form-group">
+                <label>RUT Prevencionista</label>
+                <input type="text" id="firma_prev_rut" placeholder="Ej: 11222333-4">
+            </div>
+            <div class="form-group">
+                <label>Contraseña Prevencionista</label>
+                <input type="password" id="firma_prev_clave" placeholder="Contraseña">
+            </div>
+
+            <div class="form-actions" style="margin-top: 20px;">
+                <button type="button" class="btn-secondary" onclick="cerrarModal('modal-aprobar-cierre')">Cancelar</button>
+                <button type="button" class="btn-primary" onclick="confirmarCierreAuditoria()">Cerrar Auditoría</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ingreso Planes de Accion -->
+    <div id="modal-ingreso-planes" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 800px; width: 90%;">
+            <h2 style="color: var(--primary-color); margin-bottom: 20px;">Ingreso de Planes de Acción</h2>
+            <p style="margin-bottom: 20px;">Redacte los planes de acción para las preguntas marcadas como "No Cumple".</p>
+            <div id="ingreso-planes-container" style="max-height: 400px; overflow-y: auto; padding-right: 10px;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Pregunta ID</th>
+                            <th>Observación</th>
+                            <th>Plan de Acción</th>
+                            <th>Fecha Compromiso</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-ingreso-planes">
+                        <!-- Llenado dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="form-actions" style="margin-top: 20px;">
+                <button type="button" class="btn-secondary" onclick="cerrarModal('modal-ingreso-planes')">Cancelar</button>
+                <button type="button" class="btn-primary" onclick="guardarYFirmarPlanes()">Guardar y Proceder a Firmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Aprobar Planes de Accion -->
+    <div id="modal-aprobar-planes" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 500px;">
+            <h2 style="color: var(--primary-color); margin-bottom: 20px;">Aprobar Planes de Acción</h2>
+            <p style="margin-bottom: 20px; font-size: 0.9rem;">Se ha enviado un código temporal al correo del Administrador de Obra. Ingréselo junto a la firma del Prevencionista para aprobar.</p>
+            
+            <div class="form-group">
+                <label>Token del Administrador</label>
+                <input type="text" id="firma_token_admin" placeholder="Código de 6 dígitos enviado por correo">
+            </div>
+            <hr style="border-color: #444; margin: 20px 0;">
+            <div class="form-group">
+                <label>RUT Prevencionista</label>
+                <input type="text" id="firma_plan_prev_rut" placeholder="Ej: 11222333-4">
+            </div>
+            <div class="form-group">
+                <label>Contraseña Prevencionista</label>
+                <input type="password" id="firma_plan_prev_clave" placeholder="Contraseña">
+            </div>
+
+            <div class="form-actions" style="margin-top: 20px;">
+                <button type="button" class="btn-secondary" onclick="cerrarModal('modal-aprobar-planes')">Cancelar</button>
+                <button type="button" class="btn-primary" onclick="confirmarAprobacionPlanes()">Aprobar y Enviar PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Editar Plan de Accion -->
+    <div id="modal-editar-plan" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 600px;">
+            <h2 style="color: var(--primary-color); margin-bottom: 20px;">Editar Plan de Acción</h2>
+            <input type="hidden" id="edit_plan_id">
+            <div class="form-group">
+                <label>Texto del Plan de Acción</label>
+                <textarea id="edit_plan_texto" rows="5" placeholder="Describa el plan de acción..." style="width: 100%; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff; padding: 10px;"></textarea>
+            </div>
+            <div class="form-actions" style="margin-top: 20px;">
+                <button type="button" class="btn-secondary" onclick="cerrarModal('modal-editar-plan')">Cancelar</button>
+                <button type="button" class="btn-primary" onclick="submitEditarPlan()">Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Cerrar Plan de Accion -->
+    <div id="modal-cerrar-plan" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 600px;">
+            <h2 style="color: var(--primary-color); margin-bottom: 20px;">Cerrar Plan de Acción</h2>
+            <input type="hidden" id="cerrar_plan_id">
+            <div class="form-group">
+                <label>Evidencia de Solución (Texto)</label>
+                <textarea id="cerrar_plan_evidencia_texto" rows="4" placeholder="Explique qué se hizo para cerrar el plan..." style="width: 100%; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff; padding: 10px;"></textarea>
+            </div>
+            <div class="form-group" style="margin-top: 15px;">
+                <label>Evidencias (PDF o Fotos) [Múltiples archivos]</label>
+                <input type="file" id="cerrar_plan_archivos" multiple accept=".pdf, image/jpeg, image/png, image/jpg" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff;">
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;">Puede seleccionar de 1 a N archivos PDF o Fotos.</p>
+            </div>
+            <div class="form-actions" style="margin-top: 20px;">
+                <button type="button" class="btn-secondary" onclick="cerrarModal('modal-cerrar-plan')">Cancelar</button>
+                <button type="button" class="btn-primary" onclick="submitCerrarPlan()" style="background: #2ecc71;">Finalizar Plan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Revisar / Rechazar Plan de Accion -->
+    <div id="modal-revisar-plan" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 650px;">
+            <h2 style="color: var(--primary-color); margin-bottom: 20px;">Revisar Evidencia de Plan</h2>
+            <input type="hidden" id="revisar_plan_id">
+            <div class="form-group">
+                <label>Evidencia Documentada</label>
+                <div id="revisar_evidencia_texto" style="padding: 15px; background: rgba(255,255,255,0.05); border-radius: 8px; min-height: 50px;"></div>
+            </div>
+            <div class="form-group" style="margin-top: 15px;">
+                <label>Archivos Adjuntos (PDF o Fotos)</label>
+                <div id="revisar_evidencia_archivos" style="display:flex; flex-direction:column; gap: 8px; margin-top: 10px;"></div>
+            </div>
+            
+            <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
+            <div id="rechazo-section" style="display: none; margin-bottom: 20px;">
+                <label style="color: #e74c3c;">Motivo del Rechazo</label>
+                <textarea id="revisar_plan_motivo" rows="3" placeholder="Indique por qué la evidencia no es suficiente..." style="width: 100%; border-radius: 8px; border: 1px solid #e74c3c; background: rgba(231,76,60,0.1); color: #fff; padding: 10px; margin-top: 8px;"></textarea>
+                <div class="form-actions" style="margin-top: 15px; justify-content: flex-end;">
+                    <button type="button" class="btn-secondary" onclick="ocultarSeccionRechazo()">Cancelar Rechazo</button>
+                    <button type="button" class="btn-primary" onclick="submitRechazarPlan()" style="background: #e74c3c;">Confirmar Rechazo</button>
+                </div>
+            </div>
+
+            <div class="form-actions" id="revisar-actions">
+                <button type="button" class="btn-secondary" onclick="cerrarModal('modal-revisar-plan')">Cerrar</button>
+                <button type="button" class="btn-primary" onclick="mostrarSeccionRechazo()" style="background: #e74c3c;">Rechazar Cierre</button>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
