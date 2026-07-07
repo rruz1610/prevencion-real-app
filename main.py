@@ -2626,11 +2626,42 @@ def get_auditoria_detalle(auditoria_id: str):
             "observacion": str(r["observacion"])
         })
         
+    obra_nombre = ""
+    try:
+        df_obras = _sql_read("MANT_", "Obras")
+        if not df_obras.empty:
+            match = df_obras[df_obras["id"].astype(str) == str(aud_row["obra_id"])]
+            if not match.empty:
+                obra_nombre = str(match.iloc[0].get("nombre", ""))
+    except: pass
+
+    plantilla_nombre = ""
+    try:
+        df_plantillas = _sql_read("AUDIT_", "Plantillas")
+        if not df_plantillas.empty:
+            match = df_plantillas[df_plantillas["id"].astype(str) == str(aud_row["plantilla_id"])]
+            if not match.empty:
+                plantilla_nombre = str(match.iloc[0].get("nombre", ""))
+    except: pass
+
+    prev_nombre = ""
+    try:
+        if "prevencionista_id" in aud_row and pd.notna(aud_row["prevencionista_id"]):
+            df_prev = _sql_read("MANT_", "Prevencionistas")
+            if not df_prev.empty:
+                match = df_prev[df_prev["id"].astype(str) == str(aud_row["prevencionista_id"])]
+                if not match.empty:
+                    prev_nombre = str(match.iloc[0].get("nombre", ""))
+    except: pass
+
     return {
         "id": auditoria_id,
         "plantilla_id": str(aud_row["plantilla_id"]) if pd.notna(aud_row["plantilla_id"]) else "",
+        "plantilla_nombre": plantilla_nombre,
         "obra_id": str(aud_row["obra_id"]) if pd.notna(aud_row["obra_id"]) else "",
+        "obra_nombre": obra_nombre,
         "prevencionista_id": str(aud_row["prevencionista_id"]) if "prevencionista_id" in aud_row and pd.notna(aud_row["prevencionista_id"]) and str(aud_row["prevencionista_id"]).strip() != "" else None,
+        "prevencionista_nombre": prev_nombre,
         "fecha": str(aud_row.get("fecha_fin") or aud_row.get("fecha") or ""),
         "fecha_inicio": str(aud_row.get("fecha_inicio") or aud_row.get("fecha") or ""),
         "fecha_fin": str(aud_row.get("fecha_fin") or aud_row.get("fecha") or ""),
@@ -3773,6 +3804,8 @@ async def get_auditoria_planes_accion(empresa_id: str = None, obra_id: str = Non
         
         df_resp_nc = df_resp[df_resp["estado"] == "No Cumple"]
         
+        df_preg = _sql_read("AUDIT_", "Preguntas")
+        
         resultados = []
         for _, r in df_resp_nc.iterrows():
             aud_id = str(r["auditoria_id"])
@@ -3785,10 +3818,17 @@ async def get_auditoria_planes_accion(empresa_id: str = None, obra_id: str = Non
                 if not plan_match.empty:
                     plan_texto = plan_match.iloc[0].get("plan_texto", "")
                     fecha_cumplimiento = plan_match.iloc[0].get("fecha_cumplimiento", "")
+            
+            pregunta_texto = preg_id
+            if not df_preg.empty:
+                preg_match = df_preg[df_preg["id"].astype(str) == preg_id]
+                if not preg_match.empty:
+                    pregunta_texto = preg_match.iloc[0].get("texto", preg_id)
                     
             resultados.append({
                 "auditoria_id": aud_id,
                 "pregunta_id": preg_id,
+                "pregunta_texto": str(pregunta_texto),
                 "comentario_original": r.get("observacion", ""),
                 "plan_texto": plan_texto,
                 "fecha_cumplimiento": fecha_cumplimiento

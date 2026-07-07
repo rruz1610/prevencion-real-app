@@ -1,0 +1,48 @@
+function mostrarRevisionAuditoria() {
+    const respuestas = collectAuditResponses();
+    const questions = document.querySelectorAll('.audit-question');
+    
+    // Inject metadata
+    const metaContainer = document.getElementById('review-audit-metadata');
+    const obraSelect = document.getElementById('audit_obra_id');
+    const prevSelect = document.getElementById('audit_prevencionista_id');
+    
+    let obraNombre = obraSelect.options[obraSelect.selectedIndex]?.text || '';
+    let prevNombre = prevSelect.options[prevSelect.selectedIndex]?.text || '';
+    
+    metaContainer.innerHTML = `
+        <div><strong>Obra:</strong> ${obraNombre}</div>
+        <div><strong>Prevencionista a auditar:</strong> ${prevNombre}</div>
+        <div><strong>Fecha:</strong> ${new Date().toLocaleDateString()}</div>
+        <div><strong>Total Respuestas:</strong> ${respuestas.length}</div>
+    `;
+    
+    // Inject questions
+    const qContainer = document.getElementById('review-audit-questions');
+    let qHtml = '';
+    
+    respuestas.forEach(r => {
+        // Find the question text
+        const qDiv = Array.from(questions).find(div => div.dataset.id === String(r.pregunta_id));
+        const text = qDiv ? qDiv.querySelector('strong').innerText : 'Pregunta desconocida';
+        
+        let color = 'var(--text-color)';
+        if (r.estado === 'Cumple') color = '#27ae60';
+        if (r.estado === 'No Cumple') color = '#c0392b';
+        if (r.estado === 'N/A') color = '#7f8c8d';
+        
+        qHtml += `
+            <div style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color);">
+                <p style="margin: 0 0 5px 0;"><strong>${text}</strong></p>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="font-weight: bold; color: ${color};">${r.estado}</span>
+                    <span style="color: var(--text-color); font-style: italic;">${r.observacion || 'Sin observaciones'}</span>
+                </div>
+            </div>
+        `;
+    });
+    
+    qContainer.innerHTML = qHtml;
+    
+    mostrarModal('modal-revisar-auditoria');
+}

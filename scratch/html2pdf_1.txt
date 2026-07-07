@@ -1,0 +1,1330 @@
+function subirFormatoExcel() {
+    const fileInput = document.getElementById('import_file');
+    const nombre = document.getElementById('import_nombre').value;
+    
+    if (!fileInput.files.length || !nombre) {
+        return alert("Por favor complete el nombre y seleccione un archivo.");
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('nombre', nombre);
+    formData.append('empresa_id', window.currentEmpresaId || '');
+    
+    // UI feedback
+    const btnSubmit = document.querySelector('#form-importar-excel button[type="submit"]');
+    const originalText = btnSubmit.innerText;
+    btnSubmit.innerText = 'Subiendo...';
+    btnSubmit.disabled = true;
+    
+    try {
+        const res = await fetch('/api/auditorias/upload-excel', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        
+        if (res.ok && data.status === 'success') {
+            alert("Formulario importado exitosamente con ID: " + data.plantilla_id);
+            document.getElementById('import_file').value = '';
+            document.getElementById('import_nombre').value = '';
+            loadExistingTemplatesEditor();
+        } else {
+            alert(data.detail || "Error al subir el archivo.");
+        }
+    } catch (e) {
+        alert("Ocurrió un error en la conexión.");
+    } finally {
+        btnSubmit.innerText = originalText;
+        btnSubmit.disabled = false;
+    }
+}
+
+async function loadExistingTemplatesEditor() {
+    const listContainer = document.getElementById('builder-existing-templates-list');
+    if (!listContainer) return;
+    
+    listContainer.innerHTML = '<span style="color:#aaa;">Cargando plantillas...</span>';
+    try {
+        const data = await fetchAPI(`/api/auditorias/plantillas?empresa_id=${window.currentEmpresaId || ''}`);
+        listContainer.innerHTML = '';
+        if (!data || data.length === 0) {
+            listContainer.innerHTML = '<span style="color:#aaa;">No hay plantillas creadas todavía.</span>';
+            return;
+        }
+        
+        data.forEach(p => {
+            listContainer.innerHTML += `
+            <div style="background: rgba(255,255,255,0.05); border: 1px solid #444; border-radius: 8px; padding: 15px; min-width: 200px;">
+                <h4 style="margin-top:0; color: white;">${p.nombre}</h4>
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button class="btn-primary" style="flex:1; font-size: 0.8rem;" onclick="editPlantilla('${p.id}')">Editar</button>
+                    <button class="btn-danger" style="flex:1; font-size: 0.8rem;" onclick="deletePlantilla('${p.id}')">Inhabilitar</button>
+                </div>
+            </div>`;
+        });
+    } catch(e) {
+        listContainer.innerHTML = '<span style="color:red;">Error al cargar plantillas</span>';
+    }
+}
+
+async function deletePlantilla(id) {
+    if (!confirm("¿Está seguro que desea inhabilitar esta plantilla? Dejará de estar disponible para nuevas auditorías, pero se conservará el histórico.")) return;
+    const res = await fetchAPI(`/api/auditorias/plantillas/${id}`, { method: 'DELETE' });
+    if (res && res.status === 'success') {
+        alert("Plantilla inhabilitada correctamente.");
+        loadExistingTemplatesEditor();
+    }
+}
+
+async function editPlantilla(id) {
+    try {
+        const data = await fetchAPI(`/api/auditorias/plantillas/${id}`);
+        if (!data) return;
+        
+        document.getElementById('builder_plantilla_id').value = data.id;
+        document.getElementById('builder_nombre').value = data.nombre;
+        
+        const catContainer = document.getElementById('builder-categories');
+        catContainer.innerHTML = '';
+        builderCategoryCounter = 0;
+        builderQuestionCounter = 0;
+        
+        if (data.categorias && data.categorias.length > 0) {
+            data.categorias.forEach(cat => {
+                builderCategoryCounter++;
+                const catId = `cat-${builderCategoryCounter}`;
+                
+                let questionsHtml = '';
+                if (cat.preguntas) {
+                    cat.preguntas.forEach(q => {
+                        builderQuestionCounter++;
+                        const qId = `q-${builderQuestionCounter}`;
+                        questionsHtml += `
+                            <div id="${qId}" style="display: flex; gap: 10px; align-items: center;">
+                                <span style="color: #888;">Pregunta:</span>
+                                <input type="text" placeholder="Texto de la pregunta..." style="flex: 1; padding: 6px;" class="q-text input-dark" value="${q.texto.replace(/"/g, '&quot;')}">
+                                <button type="button" class="btn-danger" style="padding: 5px 10px;" onclick="document.getElementById('${qId}').remove()">X</button>
+                            </div>
+                        `;
+                    });
+                }
+                
+                const catHtml = `
+                    <div id="${catId}" style="border: 1px solid #444; padding: 15px; margin-bottom: 10px; border-radius: 5px; background: rgba(255,255,255,0.02);">
+                        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                            <input type="text" placeholder="Nombre de Categoría (Ej: Nivel 1)" style="flex: 1; padding: 8px;" class="cat-name input-dark" value="${cat.nombre.replace(/"/g, '&quot;')}">
+                            <button type="button" class="btn-danger" onclick="document.getElementById('${catId}').remove()">Eliminar Nivel</button>
+                        </div>
+                        <div class="questions-container" style="margin-left: 20px; display: flex; flex-direction: column; gap: 5px;">
+                            ${questionsHtml}
+                        </div>
+                        <button type="button" class="btn-secondary" style="margin-top: 10px; margin-left: 20px; font-size: 0.8rem;" onclick="addBuilderQuestion('${catId}')">+ Agregar Pregunta</button>
+                    </div>
+                `;
+                catContainer.insertAdjacentHTML('beforeend', catHtml);
+            });
+        }
+        
+        document.getElementById('builder-title').scrollIntoView({ behavior: 'smooth' });
+    } catch(e) {
+        alert("Error al cargar la plantilla.");
+    }
+}
+
+// === EVENTO SELECT OBRA EN AUDITORIA ===
+document.addEventListener('DOMContentLoaded', () => {
+    const auditObraSelect = document.getElementById('audit_obra_id');
+    if (auditObraSelect) {
+        auditObraSelect.addEventListener('change', async (e) => {
+            const obraId = e.target.value;
+            const prevSelect = document.getElementById('audit_prevencionista_id');
+            const jefeSelect = document.getElementById('audit_jefe_obra_id');
+            
+            if (!obraId) {
+                prevSelect.innerHTML = '<option value="">Seleccione una Obra primero...</option>';
+                jefeSelect.innerHTML = '<option value="">Seleccione una Obra primero...</option>';
+                return;
+            }
+            
+            prevSelect.innerHTML = '<option value="">Cargando...</option>';
+            jefeSelect.innerHTML = '<option value="">Cargando...</option>';
+            
+            try {
+                const [prevs, jefes] = await Promise.all([
+                    fetchAPI('/api/prevencionistas'),
+                    fetchAPI('/api/jefes-obra')
+                ]);
+                
+                prevSelect.innerHTML = '<option value="">Seleccione Prevencionista...</option>';
+                if (prevs) {
+                    const filteredPrevs = prevs.filter(p => String(p.obra_id) === String(obraId));
+                    filteredPrevs.forEach(p => {
+                        prevSelect.innerHTML += `<option value="${p.id}">${p.nombre} (${p.rut})</option>`;
+                    });
+                    if (filteredPrevs.length === 0) prevSelect.innerHTML = '<option value="">Sin prevencionistas asignados</option>';
+                }
+                
+                jefeSelect.innerHTML = '<option value="">Seleccione Administrador...</option>';
+                if (jefes) {
+                    const filteredJefes = jefes.filter(j => String(j.obra_id) === String(obraId));
+                    filteredJefes.forEach(j => {
+                        jefeSelect.innerHTML += `<option value="${j.id}">${j.nombre} (${j.rut})</option>`;
+                    });
+                    if (filteredJefes.length === 0) jefeSelect.innerHTML = '<option value="">Sin administrador asignado</option>';
+                }
+            } catch(err) {
+                prevSelect.innerHTML = '<option value="">Error al cargar</option>';
+                jefeSelect.innerHTML = '<option value="">Error al cargar</option>';
+            }
+        });
+    }
+});
+
+// === REPORTABILIDAD MENSUAL ===
+
+async function actualizarFiltrosReportabilidad() {
+    const empresaIdEl = document.getElementById('filtro_empresa_rep');
+    let empresaId = empresaIdEl ? empresaIdEl.value : '';
+    if(window.userProfile === 'gerente_prevencion' && window.currentEmpresaId && !empresaId) {
+        empresaId = window.currentEmpresaId;
+    }
+    const obraSelect = document.getElementById('filtro_obra_rep');
+    if (!obraSelect) return;
+    obraSelect.innerHTML = '<option value="">Cargando...</option>';
+    let url = '/api/obras';
+    if (empresaId) url += `?empresa_id=${empresaId}`;
+    const obras = await fetchAPI(url);
+    obraSelect.innerHTML = '<option value="">Seleccione Obra...</option>';
+    if (obras) {
+        obras.forEach(o => {
+            if (window.userProfile === 'jefe_obra' || window.userProfile === 'prevencionista' || window.userProfile === 'prevencionista_terreno') {
+                 let userObras = window.userObras || [];
+                 if (userObras.includes(o.id) || o.id == currentObraId) {
+                     obraSelect.innerHTML += `<option value="${o.id}">${o.nombre}</option>`;
+                 }
+            } else {
+                 obraSelect.innerHTML += `<option value="${o.id}">${o.nombre}</option>`;
+            }
+        });
+        
+        if (window.userProfile === 'jefe_obra' || window.userProfile === 'prevencionista' || window.userProfile === 'prevencionista_terreno') {
+            if (obraSelect.options.length === 2) {
+                obraSelect.selectedIndex = 1;
+            } else if (currentObraId) {
+                const match = Array.from(obraSelect.options).find(opt => opt.value == currentObraId);
+                if (match) obraSelect.value = currentObraId;
+            }
+        }
+    }
+    loadReportabilidad();
+}
+
+async function loadReportabilidad() {
+    const empresaIdEl = document.getElementById('filtro_empresa_rep');
+    let empresaId = empresaIdEl ? empresaIdEl.value : '';
+    if(window.userProfile === 'gerente_prevencion' && window.currentEmpresaId && !empresaId) {
+        empresaId = window.currentEmpresaId;
+    }
+    const obraId = document.getElementById('filtro_obra_rep') ? document.getElementById('filtro_obra_rep').value : '';
+    const anio = document.getElementById('filtro_anio_rep') ? document.getElementById('filtro_anio_rep').value : '';
+    const mes = document.getElementById('filtro_mes_rep') ? document.getElementById('filtro_mes_rep').value : '';
+    
+    let url = '/api/reportabilidad-mensual/historial?';
+    if (empresaId) url += `empresa_id=${empresaId}&`;
+    if (obraId) url += `obra_id=${obraId}&`;
+    if (anio) url += `anio=${anio}&`;
+    
+    const cacheUrl = url.includes("?") ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`;
+    const data = await fetchAPI(cacheUrl);
+    const tbody = document.getElementById('tabla-reportabilidad');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color: #aaa;">Sin registros</td></tr>';
+        return;
+    }
+    
+    data.forEach(r => {
+        tbody.innerHTML += `
+            <tr>
+                <td>${r.anio || ''}</td>
+                <td>${r.mes || ''}</td>
+                <td>${r.total_trabajadores ?? 0}</td>
+                <td>${r.trabajadores_vigilancia ?? 0}</td>
+                <td>${r.horas_trabajadas ?? 0}</td>
+                <td>${r.enfermedades_profesionales ?? 0}</td>
+                <td>${r.jornadas_perdidas_ep ?? 0}</td>
+                <td>${r.accidentes_con_baja ?? 0}</td>
+                <td>${r.jornadas_perdidas ?? 0}</td>
+            </tr>
+        `;
+    });
+}
+
+async function guardarReportabilidad(e) {
+    if (e) e.preventDefault();
+    const empresaId = document.getElementById('filtro_empresa_rep') ? document.getElementById('filtro_empresa_rep').value : '';
+    const obraId = document.getElementById('filtro_obra_rep') ? document.getElementById('filtro_obra_rep').value : '';
+    const anio = document.getElementById('filtro_anio_rep') ? document.getElementById('filtro_anio_rep').value : '';
+    const mes = document.getElementById('filtro_mes_rep') ? document.getElementById('filtro_mes_rep').value : '';
+    
+    if (!empresaId || !obraId || !anio || !mes) {
+        alert('Por favor seleccione Empresa, Obra, Año y Mes antes de guardar.');
+        return;
+    }
+    
+    const hombres = parseInt(document.getElementById('rep_hombres').value || '0');
+    const mujeres = parseInt(document.getElementById('rep_mujeres').value || '0');
+    const total = parseInt(document.getElementById('rep_total').value || '0');
+    const vigilancia = parseInt(document.getElementById('rep_trabajadores_vigilancia').value || '0');
+    const horas = parseFloat(document.getElementById('rep_horas_trabajadas').value || '0');
+    const ep = parseInt(document.getElementById('rep_enfermedades_profesionales').value || '0');
+    const jornadasEp = parseInt(document.getElementById('rep_jornadas_perdidas_ep').value || '0');
+    const accidentes = parseInt(document.getElementById('rep_accidentes_con_baja').value || '0');
+    const jornadas = parseInt(document.getElementById('rep_jornadas_perdidas').value || '0');
+    
+    const payload = {
+        empresa_id: empresaId,
+        obra_id: obraId,
+        anio: anio,
+        mes: mes,
+        hombres: hombres,
+        mujeres: mujeres,
+        total_trabajadores: total,
+        trabajadores_vigilancia: vigilancia,
+        horas_trabajadas: horas,
+        enfermedades_profesionales: ep,
+        jornadas_perdidas_ep: jornadasEp,
+        accidentes_con_baja: accidentes,
+        jornadas_perdidas: jornadas
+    };
+    
+    const res = await fetchAPI('/api/reportabilidad-mensual', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+    });
+    
+    if (res && res.status === 'success') {
+        alert('Registro guardado exitosamente.');
+        loadReportabilidad();
+    }
+}
+
+function calcularTotalTrabajadoresRep() {
+    const hombres = parseInt(document.getElementById('rep_hombres').value || '0');
+    const mujeres = parseInt(document.getElementById('rep_mujeres').value || '0');
+    const totalEl = document.getElementById('rep_total');
+    if (totalEl) totalEl.value = hombres + mujeres;
+}
+
+
+async function actualizarFiltroObrasGr() {
+    const empresaIdEl = document.getElementById('filtro_empresa_gr');
+    let empresaId = empresaIdEl ? empresaIdEl.value : '';
+    if(window.userProfile === 'gerente_prevencion' && window.currentEmpresaId && !empresaId) {
+        empresaId = window.currentEmpresaId;
+    }
+    const obraSelect = document.getElementById('filtro_obra_gr');
+    if (!obraSelect) return;
+    obraSelect.innerHTML = '<option value="">Cargando...</option>';
+    let url = '/api/obras';
+    if (empresaId) url += `?empresa_id=${empresaId}`;
+    const obras = await fetchAPI(url);
+    obraSelect.innerHTML = '<option value="">Todas las Obras</option>';
+    if (obras) {
+        obras.forEach(o => {
+            if (window.userProfile === 'jefe_obra' || window.userProfile === 'prevencionista' || window.userProfile === 'prevencionista_terreno') {
+                 let userObras = window.userObras || [];
+                 if (userObras.includes(o.id) || o.id == currentObraId) {
+                     obraSelect.innerHTML += `<option value="${o.id}">${o.nombre}</option>`;
+                 }
+            } else {
+                 obraSelect.innerHTML += `<option value="${o.id}">${o.nombre}</option>`;
+            }
+        });
+        
+        if (window.userProfile === 'jefe_obra' || window.userProfile === 'prevencionista' || window.userProfile === 'prevencionista_terreno') {
+            if (obraSelect.options.length === 2) {
+                obraSelect.selectedIndex = 1;
+            } else if (currentObraId) {
+                const match = Array.from(obraSelect.options).find(opt => opt.value == currentObraId);
+                if (match) obraSelect.value = currentObraId;
+            }
+        }
+    }
+    cargarGraficosReportabilidad();
+}
+
+async function cargarGraficosReportabilidad() {
+    const empresaIdEl = document.getElementById('filtro_empresa_gr');
+    let empresaId = empresaIdEl ? empresaIdEl.value : '';
+    if(window.userProfile === 'gerente_prevencion' && window.currentEmpresaId && !empresaId) {
+        empresaId = window.currentEmpresaId;
+    }
+    const obraId = document.getElementById('filtro_obra_gr') ? document.getElementById('filtro_obra_gr').value : '';
+    const anio = document.getElementById('filtro_anio_gr') ? document.getElementById('filtro_anio_gr').value : '';
+    
+    let url = '/api/reportabilidad-mensual/historial?';
+    if (empresaId) url += `empresa_id=${empresaId}&`;
+    if (obraId) url += `obra_id=${obraId}&`;
+    if (anio) url += `anio=${anio}&`;
+    
+    const cacheUrl = url.includes("?") ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`;
+    const data = await fetchAPI(cacheUrl);
+    if (!data || data.length === 0) {
+        alert('No hay datos para mostrar en los gráficos.');
+        return;
+    }
+    
+    let dataAsc = [...data].reverse();
+    
+    const groupedDataMap = new Map();
+    dataAsc.forEach(r => {
+        const key = `${r.anio}-${r.mes}`;
+        if (!groupedDataMap.has(key)) {
+            groupedDataMap.set(key, {
+                anio: r.anio,
+                mes: r.mes,
+                total_trabajadores: 0,
+                trabajadores_vigilancia: 0,
+                accidentes_con_baja: 0,
+                enfermedades_profesionales: 0,
+                jornadas_perdidas: 0,
+                jornadas_perdidas_ep: 0,
+                horas_trabajadas: 0,
+                hombres: 0,
+                mujeres: 0
+            });
+        }
+        const g = groupedDataMap.get(key);
+        g.total_trabajadores += parseFloat(r.total_trabajadores || 0);
+        g.trabajadores_vigilancia += parseFloat(r.trabajadores_vigilancia || 0);
+        g.accidentes_con_baja += parseFloat(r.accidentes_con_baja || 0);
+        g.enfermedades_profesionales += parseFloat(r.enfermedades_profesionales || 0);
+        g.jornadas_perdidas += parseFloat(r.jornadas_perdidas || 0);
+        g.jornadas_perdidas_ep += parseFloat(r.jornadas_perdidas_ep || 0);
+        g.horas_trabajadas += parseFloat(r.horas_trabajadas || 0);
+        g.hombres += parseFloat(r.hombres || 0);
+        g.mujeres += parseFloat(r.mujeres || 0);
+    });
+    dataAsc = Array.from(groupedDataMap.values());
+    
+    const meses = dataAsc.map(r => `${r.anio}-${r.mes}`);
+    const totalTrab = dataAsc.map(r => r.total_trabajadores || 0);
+    const trabVig = dataAsc.map(r => r.trabajadores_vigilancia || 0);
+    const accidentes = dataAsc.map(r => r.accidentes_con_baja || 0);
+    const ep = dataAsc.map(r => r.enfermedades_profesionales || 0);
+    const jornadas = dataAsc.map(r => (r.jornadas_perdidas || 0) + (r.jornadas_perdidas_ep || 0));
+    const horas = dataAsc.map(r => r.horas_trabajadas || 0);
+
+    const sumHombres = dataAsc.reduce((acc, r) => acc + (r.hombres || 0), 0);
+    const sumMujeres = dataAsc.reduce((acc, r) => acc + (r.mujeres || 0), 0);
+    
+    // 1. chartEvolucionTrabajadores
+    const canvasEv = document.getElementById('chartEvolucionTrabajadores');
+    if (canvasEv) {
+        if (window._chartEv) window._chartEv.destroy();
+        window._chartEv = new Chart(canvasEv, {
+            type: 'line',
+            data: {
+                labels: meses,
+                datasets: [
+                    { label: 'Total Trabajadores', data: totalTrab, borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.2)', fill: true, tension: 0.1 },
+                    { label: 'Vigilancia Médica', data: trabVig, borderColor: '#e74c3c', backgroundColor: 'rgba(231, 76, 60, 0.2)', fill: true, tension: 0.1 }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+        });
+    }
+
+    // 2. chartSiniestralidad
+    const canvasSin = document.getElementById('chartSiniestralidad');
+    if (canvasSin) {
+        if (window._chartSin) window._chartSin.destroy();
+        window._chartSin = new Chart(canvasSin, {
+            type: 'bar',
+            data: {
+                labels: meses,
+                datasets: [
+                    { label: 'Accidentes CTP', data: accidentes, backgroundColor: '#f1c40f' },
+                    { label: 'Enfermedades Prof.', data: ep, backgroundColor: '#e67e22' },
+                    { label: 'Jornadas Perdidas', data: jornadas, backgroundColor: '#c0392b' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+        });
+    }
+
+    // 3. chartGenero
+    const canvasGen = document.getElementById('chartGenero');
+    if (canvasGen) {
+        if (window._chartGen) window._chartGen.destroy();
+        window._chartGen = new Chart(canvasGen, {
+            type: 'doughnut',
+            data: {
+                labels: ['Hombres', 'Mujeres'],
+                datasets: [{ data: [sumHombres, sumMujeres], backgroundColor: ['#3498db', '#9b59b6'] }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+    }
+
+    // 4. chartHoras
+    const canvasHoras = document.getElementById('chartHoras');
+    if (canvasHoras) {
+        if (window._chartHoras) window._chartHoras.destroy();
+        window._chartHoras = new Chart(canvasHoras, {
+            type: 'bar',
+            data: {
+                labels: meses,
+                datasets: [{ label: 'Horas Trabajadas', data: horas, backgroundColor: '#2ecc71' }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+        });
+    }
+
+    renderTablasResumenAnual(dataAsc);
+}
+
+function renderTablasResumenAnual(data) {
+    const anio1Data = [];
+    const anio2Data = [];
+    const anio3Data = [];
+
+    data.forEach(r => {
+        const val = parseInt(r.anio) * 100 + parseInt(r.mes);
+        const item = {
+            mesAnio: `${r.mes}-${r.anio}`,
+            trabajadores: r.total_trabajadores || 0,
+            diasPerdidos: (r.jornadas_perdidas || 0) + (r.jornadas_perdidas_ep || 0),
+            val: val
+        };
+        if (val >= 202407 && val <= 202506) anio1Data.push(item);
+        if (val >= 202507 && val <= 202606) anio2Data.push(item);
+        if (val >= 202607 && val <= 202706) anio3Data.push(item);
+    });
+
+    const populate = (id, arr) => {
+        const tbody = document.getElementById(id);
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (arr.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Sin datos</td></tr>';
+            return;
+        }
+        arr.sort((a,b) => a.val - b.val).forEach(item => {
+            tbody.innerHTML += `<tr>
+                <td>${item.mesAnio}</td>
+                <td>${item.trabajadores}</td>
+                <td>${item.diasPerdidos}</td>
+            </tr>`;
+        });
+    };
+
+    populate('tabla-resumen-anio1', anio1Data);
+    populate('tabla-resumen-anio2', anio2Data);
+    populate('tabla-resumen-anio3', anio3Data);
+}
+
+function exportarResumenAnualExcel() {
+    if (typeof XLSX === 'undefined') {
+        alert("La librería para exportar a Excel no está cargada.");
+        return;
+    }
+    const wb = XLSX.utils.book_new();
+    let data = [["Período", "Mes-Año", "Trabajadores", "Días Perdidos"]];
+    
+    const extractToData = (id, yearLabel) => {
+        const tbody = document.getElementById(id);
+        if (!tbody) return;
+        
+        const rows = tbody.querySelectorAll('tr');
+        rows.forEach(row => {
+            const cols = row.querySelectorAll('td');
+            if(cols.length === 3) {
+                const mes = cols[0].innerText;
+                if(mes === '-' || mes.includes('Sin datos')) return;
+                data.push([yearLabel, mes, cols[1].innerText, cols[2].innerText]);
+            }
+        });
+    };
+    
+    extractToData('tabla-resumen-anio1', 'Año 1 (Jul 2024 - Jun 2025)');
+    data.push(["", "", "", ""]); // Fila vacía de separación
+    extractToData('tabla-resumen-anio2', 'Año 2 (Jul 2025 - Jun 2026)');
+    data.push(["", "", "", ""]);
+    extractToData('tabla-resumen-anio3', 'Año 3 (Jul 2026 - Jun 2027)');
+    
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, "Resumen Anual");
+    XLSX.writeFile(wb, "Resumen_Anual_Reportabilidad.xlsx");
+}
+
+function descargarReporteMensualPDF() {
+    const empresaIdEl = document.getElementById('filtro_empresa_rep');
+    let empresaId = empresaIdEl ? empresaIdEl.value : '';
+    if(window.userProfile === 'gerente_prevencion' && window.currentEmpresaId && !empresaId) {
+        empresaId = window.currentEmpresaId;
+    }
+    const obraId = document.getElementById('filtro_obra_rep') ? document.getElementById('filtro_obra_rep').value : '';
+    const anio = document.getElementById('filtro_anio_rep') ? document.getElementById('filtro_anio_rep').value : '';
+    
+    if (!empresaId || !anio) {
+        alert('Seleccione Empresa y Año para descargar el reporte.');
+        return;
+    }
+    
+    window.open(`/api/reportabilidad-mensual/historial?empresa_id=${empresaId}&obra_id=${obraId || ''}&anio=${anio}`, '_blank');
+}
+
+// Inicializar formulario de reportabilidad al cambiar sección
+document.addEventListener('DOMContentLoaded', () => {
+    // Conectar submit del formulario de reportabilidad
+    const formRep = document.getElementById('form-reportabilidad');
+    if (formRep) {
+        formRep.addEventListener('submit', guardarReportabilidad);
+    }
+    
+    // Llenar empresas en los selectores de reportabilidad
+    async function cargarEmpresasRep() {
+        const selectorEmpRep = document.getElementById('filtro_empresa_rep');
+        const selectorEmpGr = document.getElementById('filtro_empresa_gr');
+        const data = await fetchAPI('/api/empresas');
+        if (data) {
+            [selectorEmpRep, selectorEmpGr].forEach(sel => {
+                if (!sel) return;
+                sel.innerHTML = '<option value="">Seleccione Empresa...</option>';
+                data.forEach(e => {
+                    sel.innerHTML += `<option value="${e.id}">${e.nombre}</option>`;
+                });
+                // Pre-seleccionar empresa del contexto global si existe
+                if (window.currentEmpresaId) {
+                    sel.value = window.currentEmpresaId;
+                    if (window.userProfile === 'gerente_prevencion') {
+                        sel.disabled = true; // Bloquear si es gerente_prevencion
+                    }
+                }
+            });
+        }
+    }
+    
+    // Escuchar cuando se navega a la sección reportabilidad
+    const navRep = document.getElementById('nav-reportabilidad');
+    if (navRep) {
+        navRep.addEventListener('click', () => {
+            cargarEmpresasRep();
+            actualizarFiltrosReportabilidad();
+        });
+    }
+    
+    const navGr = document.getElementById('nav-graficos-reportabilidad');
+    if (navGr) {
+        navGr.addEventListener('click', () => {
+            cargarEmpresasRep();
+            actualizarFiltroObrasGr();
+        });
+    }
+});
+
+
+// === GRÁFICOS AUDITORIA ===
+async function cargarFiltrosAuditoriasGraficos() {
+    const selEmpresa = document.getElementById('filtro_empresa');
+    if(selEmpresa) {
+        selEmpresa.innerHTML = '<option value="">Todas las Empresas</option>';
+        let url = '/api/empresas';
+        const cacheUrl = url.includes("?") ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`;
+    const data = await fetchAPI(cacheUrl);
+        if(data) {
+            data.forEach(e => {
+                selEmpresa.innerHTML += `<option value="${e.id}">${e.nombre}</option>`;
+            });
+            if(window.userProfile === 'gerente_prevencion' && window.currentEmpresaId) {
+                selEmpresa.value = window.currentEmpresaId;
+                selEmpresa.disabled = true; // Optional: lock it to their company
+            }
+        }
+    }
+    await actualizarFiltroObras();
+    
+    const selPlantilla = document.getElementById('filtro_plantilla');
+    if(selPlantilla) {
+        selPlantilla.innerHTML = '<option value="">Todas las Plantillas</option>';
+        const pData = await fetchAPI('/api/auditorias/plantillas');
+        if(pData) {
+            pData.forEach(p => {
+                selPlantilla.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
+            });
+        }
+    }
+    
+    cargarGraficos();
+}
+
+async function actualizarFiltroObras() {
+    const selObra = document.getElementById('filtro_obra');
+    if(!selObra) return;
+    selObra.innerHTML = '<option value="">Todas las Obras</option>';
+    
+    // Al estar oculta la empresa, tomamos directamente la empresa global si aplica
+    let empId = window.currentEmpresaId;
+    
+    let url = '/api/obras';
+    if (empId) url += `?empresa_id=${empId}`;
+    const cacheUrl = url.includes("?") ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`;
+    const data = await fetchAPI(cacheUrl);
+    if(data) {
+        data.forEach(o => {
+            // Validar perfil
+            if (window.userProfile === 'jefe_obra' || window.userProfile === 'prevencionista' || window.userProfile === 'prevencionista_terreno') {
+                 let userObras = window.userObras || [];
+                 // Solo agregamos si la obra actual le corresponde
+                 if (userObras.includes(o.id) || o.id == currentObraId) {
+                     selObra.innerHTML += `<option value="${o.id}">${o.nombre}</option>`;
+                 }
+            } else {
+                 selObra.innerHTML += `<option value="${o.id}">${o.nombre}</option>`;
+            }
+        });
+
+        // Si es admin_obra o prevencionista, autoseleccionar y bloquear
+        if (window.userProfile === 'jefe_obra' || window.userProfile === 'prevencionista' || window.userProfile === 'prevencionista_terreno') {
+            if (selObra.options.length === 2) {
+                selObra.selectedIndex = 1;
+            } else if (currentObraId) {
+                const match = Array.from(selObra.options).find(opt => opt.value == currentObraId);
+                if (match) selObra.value = currentObraId;
+            }
+        }
+    }
+    await actualizarFiltroPrevencionistas();
+}
+
+async function actualizarFiltroPrevencionistas() {
+    const selObra = document.getElementById('filtro_obra');
+    const selPrev = document.getElementById('filtro_prevencionista');
+    if(!selPrev) return;
+    selPrev.innerHTML = '<option value="">Todos los Prevencionistas</option>';
+    
+    const data = await fetchAPI('/api/prevencionistas');
+    if(data) {
+        const obraId = selObra ? selObra.value : '';
+        data.forEach(p => {
+            if (!obraId || p.obra_id == obraId) {
+                selPrev.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
+            }
+        });
+    }
+}
+
+let chartCumplimiento = null;
+window.chartMes = null; window.chartNiveles = null;
+
+async function cargarGraficos() {
+    const empIdEl = document.getElementById('filtro_empresa');
+    const obraIdEl = document.getElementById('filtro_obra');
+    const planIdEl = document.getElementById('filtro_plantilla');
+    const prevIdEl = document.getElementById('filtro_prevencionista');
+    const mesIdEl = document.getElementById('filtro_mes');
+    const anioIdEl = document.getElementById('filtro_anio');
+
+    let empId = empIdEl ? empIdEl.value : '';
+    if(window.userProfile === 'gerente_prevencion' && window.currentEmpresaId && !empId) {
+        empId = window.currentEmpresaId;
+    }
+
+    const obraId = obraIdEl ? obraIdEl.value : '';
+    const planId = planIdEl ? planIdEl.value : '';
+    const prevId = prevIdEl ? prevIdEl.value : '';
+    const mes = mesIdEl ? mesIdEl.value : '';
+    const anio = anioIdEl ? anioIdEl.value : '';
+
+    let url = '/api/auditorias/historial?';
+    if (empId) url += `empresa_id=${empId}&`;
+    if (obraId) url += `obra_id=${obraId}&`;
+    
+    const cacheUrl = url.includes("?") ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`;
+    const data = await fetchAPI(cacheUrl);
+    if (!data) return;
+
+    let filtered = data.filter(a => a.estado !== "EN CURSO");
+    if (planId) filtered = filtered.filter(a => String(a.plantilla_id) === String(planId));
+    if (prevId) filtered = filtered.filter(a => String(a.prevencionista_id) === String(prevId));
+    if (anio) filtered = filtered.filter(a => {
+        if(!a.date) return false;
+        let d = a.date.substring(0, 10);
+        if (d.indexOf('-') === 2 || d.indexOf('/') === 2) {
+            return d.substring(6, 10) === anio;
+        }
+        return a.date.substring(0, 4) === anio;
+    });
+    if (mes) filtered = filtered.filter(a => {
+        if(!a.date) return false;
+        let d = a.date.substring(0, 10);
+        if (d.indexOf('-') === 2 || d.indexOf('/') === 2) {
+            return d.substring(3, 5) === mes;
+        }
+        return a.date.substring(5, 7) === mes;
+    });
+
+    let avgCumplimiento = 0;
+    if (filtered.length > 0) {
+        const sum = filtered.reduce((acc, curr) => {
+            let val = parseFloat(curr.cumplimiento || 0);
+            return acc + val;
+        }, 0);
+        avgCumplimiento = sum / filtered.length;
+    }
+
+    const ctxCumpl = document.getElementById('chartCumplimiento');
+    if (ctxCumpl) {
+        if (chartCumplimiento) chartCumplimiento.destroy();
+        chartCumplimiento = new Chart(ctxCumpl.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Cumplimiento', 'Brecha'],
+                datasets: [{
+                    data: [avgCumplimiento, 100 - avgCumplimiento],
+                    backgroundColor: ['#28a745', '#dc3545']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                onClick: (e, activeEls) => {
+                    if (activeEls.length > 0) {
+                        const index = activeEls[0].index;
+                        if (index === 1) { // Brecha
+                            mostrarDetalleBrecha(filtered);
+                        }
+                    }
+                },
+                plugins: {
+                    title: { display: true, text: `Cumplimiento Promedio: ${avgCumplimiento.toFixed(1)}%` },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed !== null) {
+                                    label += context.parsed.toFixed(1) + '%';
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    const mesesMap = {};
+    filtered.forEach(a => {
+        if (!a.date) return;
+        const m = parseDateToMes(a.date);
+        if (!m) return;
+        if (!mesesMap[m]) mesesMap[m] = { sum: 0, count: 0 };
+        mesesMap[m].sum += parseFloat(a.cumplimiento || 0);
+        mesesMap[m].count++;
+    });
+
+    const labelsMes = Object.keys(mesesMap).sort();
+    const dataMes = labelsMes.map(m => mesesMap[m].sum / mesesMap[m].count);
+
+    const ctxMes = document.getElementById('chartCumplimientoPorMes');
+    if (ctxMes) {
+        if (window.chartMes) window.chartMes.destroy();
+        window.chartMes = new Chart(ctxMes.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labelsMes.length ? labelsMes : ['Sin Datos'],
+                datasets: [{
+                    label: 'Cumplimiento Promedio (%)',
+                    data: labelsMes.length ? dataMes : [0],
+                    backgroundColor: '#007bff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 100 }
+                },
+                onClick: (evt, activeElements) => {
+                    if (activeElements.length > 0) {
+                        const idx = activeElements[0].index;
+                        const mesLabel = labelsMes[idx];
+                        mostrarModalCumplimientoObraMes(mesLabel, filtered);
+                    }
+                }
+            }
+        });
+    }
+
+    // Chart Cumplimiento por Niveles
+    let urlNiveles = '/api/auditorias/historial/niveles?';
+    if (empId) urlNiveles += `empresa_id=${empId}&`;
+    if (obraId) urlNiveles += `obra_id=${obraId}&`;
+    
+    const dataNiveles = await fetchAPI(urlNiveles);
+    const ctxNiveles = document.getElementById('chartCumplimientoNiveles');
+    if (ctxNiveles && dataNiveles) {
+        const labelsNiveles = Object.keys(dataNiveles);
+        const valuesNiveles = Object.values(dataNiveles);
+        
+        if (window.chartNiveles) window.chartNiveles.destroy();
+        window.chartNiveles = new Chart(ctxNiveles.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labelsNiveles.length ? labelsNiveles : ['Sin Datos'],
+                datasets: [{
+                    label: 'Cumplimiento por Nivel (%)',
+                    data: labelsNiveles.length ? valuesNiveles : [0],
+                    backgroundColor: '#17a2b8'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y', // Horizontal bar chart
+                scales: {
+                    x: { beginAtZero: true, max: 100 }
+                }
+            }
+        });
+    }
+}
+
+
+// === INGRESO DEDICADO DE PLANES ===
+async function abrirIngresoPlanes(aud_id) {
+    window.currentPlanAuditoriaId = aud_id;
+    const tbody = document.getElementById('tabla-ingreso-planes');
+    tbody.innerHTML = '<tr><td colspan="4">Cargando preguntas...</td></tr>';
+    mostrarModal('modal-ingreso-planes');
+    
+    // Obtenemos todos los planes (no cumple) para esta auditoria
+    const res = await fetchAPI(`/api/auditorias/planes_accion`);
+    if (!res) {
+        tbody.innerHTML = '<tr><td colspan="4">Error al cargar preguntas.</td></tr>';
+        return;
+    }
+    
+    // Filtrar solo los de esta auditoría
+    const planesAuditoria = res.filter(p => p.auditoria_id === aud_id);
+    
+    if (planesAuditoria.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4">No hay preguntas "No Cumple" pendientes.</td></tr>';
+        return;
+    }
+    
+    let html = '';
+    planesAuditoria.forEach(p => {
+        html += `
+        <tr data-pregunta="${p.pregunta_id}">
+            <td>${p.pregunta_id}</td>
+            <td>${p.comentario_original || '-'}</td>
+            <td><textarea class="plan-texto" style="width:100%; min-height:60px; background:transparent; color:white; border:1px solid #555; padding:5px;">${p.plan_texto || ''}</textarea></td>
+            <td><input type="date" class="plan-fecha" value="${p.fecha_cumplimiento || ''}" style="background:transparent; color:white; border:1px solid #555; padding:5px;"></td>
+        </tr>`;
+    });
+    tbody.innerHTML = html;
+}
+
+async function guardarYFirmarPlanes() {
+    const aud_id = window.currentPlanAuditoriaId;
+    const tbody = document.getElementById('tabla-ingreso-planes');
+    const filas = tbody.querySelectorAll('tr[data-pregunta]');
+    
+    const planesData = [];
+    filas.forEach(tr => {
+        planesData.push({
+            auditoria_id: aud_id,
+            pregunta_id: parseInt(tr.getAttribute('data-pregunta')),
+            plan_texto: tr.querySelector('.plan-texto').value,
+            fecha_cumplimiento: tr.querySelector('.plan-fecha').value
+        });
+    });
+    
+    // Validar vacíos
+    for (let p of planesData) {
+        if (!p.plan_texto.trim() || !p.fecha_cumplimiento) {
+            alert('Debe completar el texto y la fecha para todos los planes antes de proceder a firmar.');
+            return;
+        }
+    }
+    
+    // Guardar
+    const res = await fetchAPI(`/api/auditorias/guardar_planes`, {
+        method: 'POST',
+        body: JSON.stringify({ planes: planesData })
+    });
+    
+    if(res && res.status === 'success') {
+        alert("Planes guardados correctamente. Se generó un nuevo código (token) enviado al Administrador de Obra.");
+        cerrarModal('modal-ingreso-planes');
+        mostrarModal('modal-aprobar-planes');
+        
+        // Simular que llenamos la tabla de seguimiento para que cuando el PDF se genere en el próximo paso
+        // tenga los datos correctos si el usuario no pasó por la pestaña general.
+        const fallbackTable = document.getElementById('tabla-planes-accion');
+        if(fallbackTable) {
+            let html = '';
+            planesData.forEach(p => {
+                html += `<tr>
+                    <td>${p.pregunta_id}</td>
+                    <td style="color: #e74c3c;">No Cumple</td>
+                    <td>-</td>
+                    <td>${p.plan_texto}</td>
+                    <td>${p.fecha_cumplimiento}</td>
+                </tr>`;
+            });
+            fallbackTable.innerHTML = html;
+        }
+        
+    } else {
+        alert('Error al guardar planes.');
+    }
+}
+
+
+
+// === FUNCIONES MODALES PLANES DE ACCION ===
+
+function abrirModalEditarPlan(planId, textoActual) {
+    document.getElementById('edit_plan_id').value = planId;
+    document.getElementById('edit_plan_texto').value = textoActual;
+    mostrarModal('modal-editar-plan');
+}
+
+async function submitEditarPlan() {
+    const planId = document.getElementById('edit_plan_id').value;
+    const planTexto = document.getElementById('edit_plan_texto').value;
+    
+    if (!planTexto.trim()) {
+        alert('El texto del plan no puede estar vacío');
+        return;
+    }
+    
+    const res = await fetchAPI('/api/planes_accion/' + planId, {
+        method: 'PUT',
+        body: JSON.stringify({ plan_texto: planTexto })
+    });
+    
+    if (res && res.status === 'success') {
+        cerrarModal('modal-editar-plan');
+        loadPlanesAccion();
+    } else {
+        alert('Error al editar el plan');
+    }
+}
+
+function abrirModalCerrarPlan(planId) {
+    document.getElementById('cerrar_plan_id').value = planId;
+    document.getElementById('cerrar_plan_evidencia_texto').value = '';
+    document.getElementById('cerrar_plan_archivos').value = '';
+    mostrarModal('modal-cerrar-plan');
+}
+
+async function submitCerrarPlan() {
+    const planId = document.getElementById('cerrar_plan_id').value;
+    const evidenciaTexto = document.getElementById('cerrar_plan_evidencia_texto').value;
+    const fileInput = document.getElementById('cerrar_plan_archivos');
+    
+    if (!evidenciaTexto.trim()) {
+        alert('Debe ingresar un texto explicativo como evidencia.');
+        return;
+    }
+    
+    if (fileInput.files.length === 0) {
+        alert('Debe adjuntar al menos un archivo PDF como evidencia.');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('evidencia_texto', evidenciaTexto);
+    for (let i = 0; i < fileInput.files.length; i++) {
+        formData.append('evidencia_files', fileInput.files[i]);
+    }
+    
+    try {
+        const response = await fetch('/api/planes_accion/' + planId + '/cerrar', {
+            method: 'POST',
+            body: formData
+        });
+        const res = await response.json();
+        
+        if (res && res.status === 'success') {
+            cerrarModal('modal-cerrar-plan');
+            loadPlanesAccion();
+        } else {
+            alert('Error al cerrar el plan: ' + (res.detail || res.message || ''));
+        }
+    } catch(e) {
+        console.error(e);
+        alert('Error de red al cerrar el plan.');
+    }
+}
+
+function abrirModalRevisarPlan(planId, evidenciaTexto, pdfPathsStr) {
+    document.getElementById('revisar_plan_id').value = planId;
+    document.getElementById('revisar_evidencia_texto').innerText = evidenciaTexto || 'Sin texto de evidencia';
+    
+    const divArchivos = document.getElementById('revisar_evidencia_archivos');
+    divArchivos.innerHTML = '';
+    
+    try {
+        const pdfPaths = JSON.parse(pdfPathsStr.replace(/&quot;/g, '\"'));
+        if (Array.isArray(pdfPaths) && pdfPaths.length > 0) {
+            pdfPaths.forEach((path, index) => {
+                const a = document.createElement('a');
+                a.href = path;
+                a.target = '_blank';
+                a.style.color = '#3498db';
+                a.innerText = 'Ver Archivo PDF ' + (index + 1);
+                divArchivos.appendChild(a);
+            });
+        } else {
+            divArchivos.innerText = 'No hay archivos adjuntos';
+        }
+    } catch (e) {
+        divArchivos.innerText = 'Error leyendo rutas o no hay archivos';
+        if (pdfPathsStr && pdfPathsStr.trim() !== '') {
+            const a = document.createElement('a');
+            a.href = pdfPathsStr.replace(/&quot;/g, '\"');
+            a.target = '_blank';
+            a.style.color = '#3498db';
+            a.innerText = 'Ver Archivo PDF (Antiguo formato)';
+            divArchivos.innerHTML = '';
+            divArchivos.appendChild(a);
+        }
+    }
+    
+    ocultarSeccionRechazo();
+    mostrarModal('modal-revisar-plan');
+}
+
+function mostrarSeccionRechazo() {
+    document.getElementById('rechazo-section').style.display = 'block';
+    document.getElementById('revisar-actions').style.display = 'none';
+}
+
+function ocultarSeccionRechazo() {
+    document.getElementById('rechazo-section').style.display = 'none';
+    document.getElementById('revisar-actions').style.display = 'flex';
+    document.getElementById('revisar_plan_motivo').value = '';
+}
+
+async function submitRechazarPlan() {
+    const planId = document.getElementById('revisar_plan_id').value;
+    const motivo = document.getElementById('revisar_plan_motivo').value;
+    
+    if (!motivo.trim()) {
+        alert('Debe ingresar un motivo para el rechazo.');
+        return;
+    }
+    
+    const res = await fetchAPI('/api/planes_accion/' + planId + '/rechazar', {
+        method: 'POST',
+        body: JSON.stringify({ motivo: motivo })
+    });
+    
+    if (res && res.status === 'success') {
+        cerrarModal('modal-revisar-plan');
+        loadPlanesAccion();
+    } else {
+        alert('Error al rechazar el plan.');
+    }
+}
+
+
+
+function generarReportePDF(mode = 'download', aud_id = null, cb = null) {
+    // 1. Gather Metadata
+    const obraSelect = document.getElementById('audit_obra_id');
+    const prevSelect = document.getElementById('audit_prevencionista_id');
+    const plantillaSelect = document.getElementById('audit_plantilla_id');
+    
+    document.getElementById('pdf-auditoria-ref').innerText = `Ref: AUD-${aud_id || window.currentAuditoriaId || 'N/A'}`;
+    document.getElementById('pdf-meta-obra').innerText = obraSelect.options[obraSelect.selectedIndex]?.text || '-';
+    document.getElementById('pdf-meta-plantilla').innerText = plantillaSelect.options[plantillaSelect.selectedIndex]?.text || '-';
+    document.getElementById('pdf-meta-prevencionista').innerText = prevSelect.options[prevSelect.selectedIndex]?.text || '-';
+    document.getElementById('pdf-meta-fecha').innerText = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    // 2. Gather Data from DOM & Calculate stats
+    const respuestas = collectAuditResponses();
+    let totalCumple = 0, totalNoCumple = 0, totalNA = 0;
+    
+    const categories = [];
+    document.querySelectorAll('.audit-category').forEach(catDiv => {
+        const catName = catDiv.querySelector('h3').innerText;
+        const qDivs = catDiv.querySelectorAll('.audit-question');
+        const catQuestions = [];
+        let catC = 0, catNC = 0, catNA = 0;
+        
+        qDivs.forEach(qDiv => {
+            const qId = qDiv.dataset.id;
+            const text = qDiv.querySelector('strong').innerText;
+            const r = respuestas.find(x => String(x.pregunta_id) === String(qId));
+            const estado = r ? r.estado : 'Sin responder';
+            const obs = r ? r.observacion : '';
+            
+            if(estado === 'Cumple') { catC++; totalCumple++; }
+            else if(estado === 'No Cumple') { catNC++; totalNoCumple++; }
+            else if(estado === 'N/A') { catNA++; totalNA++; }
+            
+            catQuestions.push({ text, estado, obs });
+        });
+        
+        const catTotal = catC + catNC;
+        const catPct = catTotal > 0 ? Math.round((catC / catTotal) * 100) : 0;
+        
+        categories.push({ name: catName, questions: catQuestions, c: catC, nc: catNC, na: catNA, pct: catPct });
+    });
+    
+    const totalCount = totalCumple + totalNoCumple;
+    const totalPct = totalCount > 0 ? Math.round((totalCumple / totalCount) * 100) : 0;
+    
+    document.getElementById('pdf-meta-cumplimiento-pct').innerText = `${totalPct}%`;
+    document.getElementById('pdf-meta-cumplimiento-stats').innerText = `${totalCumple} Cumple / ${totalNoCumple} No cumple / ${totalNA} N/A`;
+
+    // 3. Render Chart
+    const barsContainer = document.getElementById('pdf-chart-bars');
+    let barsHtml = '';
+    categories.forEach(cat => {
+        let color = '#f39c12'; // orange
+        if (cat.pct >= 90) color = '#2ecc71'; // green
+        else if (cat.pct < 50) color = '#e74c3c'; // red
+        
+        barsHtml += `
+            <div style="position: relative; height: 8px;">
+                <div style="position: absolute; left: -110px; width: 100px; text-align: right; font-size: 8px; font-weight: bold; color: #2c3e50; top: -2px;">${cat.name}</div>
+                <div style="height: 100%; width: ${cat.pct}%; background-color: ${color}; border-radius: 4px;"></div>
+            </div>
+        `;
+    });
+    barsContainer.innerHTML = barsHtml;
+
+    // 4. Render Tables
+    const tablesContainer = document.getElementById('pdf-tables-container');
+    let tablesHtml = '';
+    categories.forEach(cat => {
+        let rowsHtml = '';
+        cat.questions.forEach(q => {
+            let color = '#34495e';
+            if(q.estado === 'Cumple') color = '#27ae60';
+            else if(q.estado === 'No Cumple') color = '#c0392b';
+            
+            rowsHtml += `
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; color: #34495e;">${q.text}</td>
+                    <td style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; font-weight: bold; color: ${color}; text-align: center;">${q.estado}</td>
+                    <td style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; color: #7f8c8d; font-style: italic;">${q.obs || '-'}</td>
+                </tr>
+            `;
+        });
+        
+        tablesHtml += `
+            <div style="margin-bottom: 20px;">
+                <h4 style="color: #4A47E3; margin: 0 0 5px 0; font-size: 12px;">${cat.name}</h4>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background-color: #f1f2f6;">
+                            <th style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; color: #2c3e50; text-align: left;">Pregunta / Requerimiento</th>
+                            <th style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; color: #2c3e50; width: 80px;">Evaluación</th>
+                            <th style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; color: #2c3e50; width: 150px;">Observaciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHtml}
+                        <tr style="background-color: #f8f9fa;">
+                            <td style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; font-weight: bold; color: #2c3e50;">CUMPLIMIENTO DEL NIVEL</td>
+                            <td style="padding: 8px; border: 1px solid #bdc3c7; font-size: 11px; font-weight: bold; color: #f39c12; text-align: center;">${cat.pct}%</td>
+                            <td style="padding: 8px; border: 1px solid #bdc3c7; font-size: 9px; color: #7f8c8d; text-align: center;">Cumple: ${cat.c} | No Cumple: ${cat.nc} | N/A: ${cat.na}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        `;
+    });
+    tablesContainer.innerHTML = tablesHtml;
+
+    // 5. Cierre Data
+    if (document.getElementById('firma_coord_rut') && document.getElementById('firma_coord_rut').value) {
+        document.getElementById('pdf-cierre-box').style.display = 'block';
+        // Mock comments if we don't have them yet, or grab them if available
+        document.getElementById('pdf-cierre-comentarios').innerText = "Cierre validado digitalmente por sistema.";
+        document.getElementById('pdf-cierre-compromisos').innerText = "Revisar anexo de planes de acción (si aplica).";
+        
+        // Find names by RUT if we wanted to be perfectly accurate, but for now just show RUTs
+        document.getElementById('pdf-firma-prev').innerText = document.getElementById('firma_prev_rut').value || '-';
+        document.getElementById('pdf-firma-obra').innerText = document.getElementById('firma_coord_rut').value || '-';
+    } else {
+        document.getElementById('pdf-cierre-box').style.display = 'none';
+        document.getElementById('pdf-firma-prev').innerText = prevSelect.options[prevSelect.selectedIndex]?.text || '-';
+        document.getElementById('pdf-firma-obra').innerText = 'Representante Obra';
+    }
+
+    // 6. Planes de Accion (Page 3)
+    // Render only if mode is 'planes' or there are planes requested
+    const planesPage = document.getElementById('pdf-page-planes');
+    const planesContainer = document.getElementById('pdf-planes-container');
+    if (mode === 'blob_with_planes') {
+        planesPage.style.display = 'block';
+        const tbodyPlanes = document.getElementById('tabla-pendientes-plan-body');
+        if (tbodyPlanes && tbodyPlanes.children.length > 0) {
+            let planesHtml = `
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background-color: #f1f2f6;">
+                        <th style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; color: #2c3e50; text-align: left;">Pregunta No Cumplida</th>
+                        <th style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; color: #2c3e50; text-align: left;">Plan de Acción Comprometido</th>
+                        <th style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; color: #2c3e50; width: 80px;">Plazo</th>
+                    </tr>
+                </thead>
+                <tbody>
+            `;
+            Array.from(tbodyPlanes.querySelectorAll('tr')).forEach(tr => {
+                const tds = tr.querySelectorAll('td');
+                if(tds.length >= 3) {
+                    const preg = tds[0].innerText;
+                    const planText = tr.querySelector('.plan-texto-input')?.value || '-';
+                    const planDate = tr.querySelector('.plan-fecha-input')?.value || '-';
+                    planesHtml += `
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; color: #34495e;">${preg}</td>
+                            <td style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; color: #27ae60; font-weight: bold;">${planText}</td>
+                            <td style="padding: 8px; border: 1px solid #bdc3c7; font-size: 10px; color: #e74c3c; text-align: center;">${planDate}</td>
+                        </tr>
+                    `;
+                }
+            });
+            planesHtml += `</tbody></table>`;
+            planesContainer.innerHTML = planesHtml;
+        } else {
+            planesContainer.innerHTML = '<p style="font-size: 12px; color: #7f8c8d;">No hay planes de acción comprometidos registrados en la tabla.</p>';
+        }
+    } else {
+        planesPage.style.display = 'none';
+    }
+
+    // 7. Generate PDF
+    const element = document.getElementById('pdf-export-content');
+    element.parentElement.style.display = 'block'; // Make it visible temporarily for rendering
+    
+    const opt = {
+        margin:       0,
+        filename:     `Reporte_Auditoria_${aud_id || window.currentAuditoriaId || 'Preview'}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+
+    if (mode === 'download') {
+        html2pdf().set(opt).from(element).save().then(() => {
+            element.parentElement.style.display = 'none';
+        }
