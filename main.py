@@ -2646,7 +2646,7 @@ class AuditoriaCierre(BaseModel):
     compromisos: str
 
 @app.post("/api/auditorias/cierre/{auditoria_id}")
-def cerrar_auditoria(auditoria_id: str, data, background_tasks: BackgroundTasks: AuditoriaCierre):
+def cerrar_auditoria(auditoria_id: str, data: AuditoriaCierre, background_tasks: BackgroundTasks):
     try:
         df_aud = _sql_read("AUDIT_", "Auditorias")
         idx = df_aud[df_aud["id"].astype(str) == str(auditoria_id)].index
@@ -3856,7 +3856,7 @@ async def guardar_planes(payload: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/auditorias/{aud_id}/aprobar_planes")
-async def aprobar_planes(aud_id: str, token_admin: str = Form(...), prevencionista_id: str = Form(...), prevencionista_clave: str = Form(...), pdf_file: UploadFile = File(None)), background_tasks: BackgroundTasks BackgroundTasks = None):
+async def aprobar_planes(aud_id: str, token_admin: str = Form(...), prevencionista_id: str = Form(...), prevencionista_clave: str = Form(...), pdf_file: UploadFile = File(None), background_tasks: BackgroundTasks = None):
     token = token_admin
     rut = prevencionista_id
     clave = prevencionista_clave
