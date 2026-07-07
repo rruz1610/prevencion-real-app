@@ -1,0 +1,3 @@
+def get_auditoria_planes_accion(empresa_id
+def guardar_planes(payload
+def aprobar_planes(aud_id

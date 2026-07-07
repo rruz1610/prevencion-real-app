@@ -1,0 +1,10 @@
+        }
+    } else if (empresaId && empresaId !== 'None' && empresaId !== 'nan') {
+        url += `empresa_id=${empresaId}`;
+    }
+
+    const cacheUrl = cacheUrl.includes("?") ? `${cacheUrl}&_t=${Date.now()}` : `${cacheUrl}?_t=${Date.now()}`;
+    const data = await fetchAPI(url);
+
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#27ae60;">✅ No hay auditorías con planes de acción pendientes.</td></tr>';

@@ -1,0 +1,40 @@
+    if df_resp.empty or "auditoria_id" not in df_resp.columns:
+        return []
+
+    aud_ids = df_aud["id"].astype(str).tolist()
+    df_resp_f = df_resp[df_resp["auditoria_id"].astype(str).isin(aud_ids)]
+    df_nc = df_resp_f[df_resp_f["estado"].astype(str) == "No Cumple"]
+
+    if df_nc.empty:
+        return []
+
+    # Auditorías con al menos un No Cumple
+    aud_con_nc = df_nc["auditoria_id"].astype(str).unique().tolist()
+
+    resultados = []
+    now = datetime.now()
+
+    for aud_id_str in aud_con_nc:
+        aud_rows = df_aud[df_aud["id"].astype(str) == aud_id_str]
+        if aud_rows.empty:
+            continue
+        aud = aud_rows.iloc[0]
+
+        # Preguntas No Cumple para esta auditoría
+        pregs_nc = df_nc[df_nc["auditoria_id"].astype(str) == aud_id_str]["pregunta_id"].astype(str).tolist()
+
+        # Verificar si TODAS tienen plan comprometido
+        planes_aud = pd.DataFrame()
+        if not df_planes_db.empty and "auditoria_id" in df_planes_db.columns:
+            planes_aud = df_planes_db[df_planes_db["auditoria_id"].astype(str) == aud_id_str]
+
+        planes_sin_texto = []
+        for preg_id in pregs_nc:
+            tiene_plan = False
+            if not planes_aud.empty and "pregunta_id" in planes_aud.columns:
+                match = planes_aud[planes_aud["pregunta_id"].astype(str) == preg_id]
+                if not match.empty:
+                    texto = str(match.iloc[0].get("plan_texto", "")).strip()
+                    if texto and texto not in ("", "nan"):
+                        tiene_plan = True
+            if not tiene_plan:

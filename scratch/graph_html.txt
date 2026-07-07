@@ -1,0 +1,20 @@
+                    <div class="glassmorphism" style="margin-top: 20px; padding: 25px; width: 100%; max-width: 100%;">
+                        <h3 style="margin-bottom: 20px; color: var(--primary-color);">Cumplimiento por Nivel (Categoría)</h3>
+                        <div style="position: relative; height: 680px; width: 100%;">
+                            <canvas id="chartCumplimientoNiveles"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Gráfico de Planes de Acción -->
+                    <div class="glassmorphism" style="margin-top: 20px; padding: 25px; width: 100%; max-width: 100%;">
+                        <h3 style="margin-bottom: 20px; color: var(--primary-color);">Planes de Acción Abiertos por Obra</h3>
+                        <div style="position: relative; height: 400px; width: 100%;">
+                            <canvas id="chartPlanesAccionObra"></canvas>
+                        </div>
+                    <!-- Tabla de Auditorías Pendientes de Cierre -->
+                    <div class="glassmorphism" style="margin-top: 20px; padding: 25px; width: 100%; max-width: 100%;">
+                        <h3 style="margin-bottom: 8px; color: #e74c3c;">⚠️ Auditorías con Planes de Acción Sin Comprometer</h3>
+                        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 16px;">
+                            Auditorías cerradas por el Gerente/Coordinador de Prevención que aún tienen preguntas "No Cumple" sin plan comprometido. Ordenadas por urgencia.
+                        </p>
+                        <div style="overflow-x: auto;">

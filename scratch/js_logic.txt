@@ -1,0 +1,35 @@
+
+// =============================================
+// DASHBOARD - Auditorías Pendientes de Plan
+// =============================================
+async function loadDashboard() {
+    const tbody = document.getElementById('tabla-pendientes-cierre');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">Cargando...</td></tr>';
+
+    const perfil = localStorage.getItem('perfil');
+    const obraId = localStorage.getItem('obra_id');
+    const empresaId = window.currentEmpresaId || localStorage.getItem('empresa_id');
+
+    let url = '/api/auditorias/pendientes-plan?';
+
+    // Prevencionista / jefe_obra → solo su obra
+    if (perfil === 'prevencionista' || perfil === 'prevencionista_terreno' || perfil === 'jefe_obra') {
+        if (obraId && obraId !== 'None' && obraId !== 'nan') {
+            url += `obra_id=${obraId}`;
+        }
+    } else if (empresaId && empresaId !== 'None' && empresaId !== 'nan') {
+        url += `empresa_id=${empresaId}`;
+    }
+
+    const data = await fetchAPI(url);
+
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#27ae60;">✅ No hay auditorías con planes de acción pendientes.</td></tr>';
+        return;
+    }
+
+    let html = '';
+    data.forEach(row => {
+        let estadoBadge = '';
+        let rowStyle = '';

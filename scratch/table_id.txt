@@ -1,0 +1,10 @@
+                                        <th>Fecha Cierre</th>
+                                        <th>Plazo (horas)</th>
+                                        <th>Vence el</th>
+                                        <th>Preguntas sin Plan</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-pendientes-cierre">
+                                    <!-- Loaded via JS -->
+                                </tbody>

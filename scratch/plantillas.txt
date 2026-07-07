@@ -1,0 +1,44 @@
+function guardarPlantilla() {
+    const idPlantilla = document.getElementById('builder_plantilla_id').value;
+    const nombre = document.getElementById('builder_nombre').value;
+    if (!nombre) return alert("Ingrese un nombre para la plantilla");
+    
+    const categorias = [];
+    document.querySelectorAll('#builder-categories > div').forEach((catDiv, idx) => {
+        const catName = catDiv.querySelector('.cat-name').value || `Nivel ${idx+1}`;
+        const preguntas = [];
+        catDiv.querySelectorAll('.questions-container > div').forEach((qDiv, qIdx) => {
+            const qText = qDiv.querySelector('.q-text').value;
+            if (qText) {
+                preguntas.push({ texto: qText, orden: qIdx+1, tipo: 'opcion_multiple' });
+            }
+        });
+        categorias.push({ nombre: catName, orden: idx+1, preguntas: preguntas });
+    });
+    
+    if (categorias.length === 0) return alert("Agregue al menos una categoría con preguntas.");
+    
+    const payload = {
+        empresa_id: window.currentEmpresaId,
+        nombre: nombre,
+        categorias: categorias
+    };
+    
+    let url = '/api/auditorias/plantillas';
+    let method = 'POST';
+    if (idPlantilla) {
+        url = `/api/auditorias/plantillas/${idPlantilla}`;
+        method = 'PUT';
+    }
+    
+    const res = await fetchAPI(url, {
+        method: method,
+        body: JSON.stringify(payload)
+    });
+    
+    if (res && res.status === 'success') {
+        alert("Plantilla guardada correctamente.");
+        cancelarEdicionPlantilla();
+        loadExistingTemplatesEditor();
+    }
+}
