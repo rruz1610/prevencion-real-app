@@ -2373,36 +2373,50 @@ async function confirmarAprobacionPlanes() {
     
     if(!token || !rutPrev || !clavePrev) return alert("Debe completar todos los campos");
     
+    const btn = document.querySelector('button[onclick="confirmarAprobacionPlanes()"]');
+    let originalText = 'Aprobar y Enviar PDF';
+    if (btn) {
+        originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerText = 'Procesando...';
+    }
+
     // Generar PDF primero y luego mandarlo al backend utilizando la nueva plantilla
     generarReportePDF('blob_with_planes', aud_id, async function(pdfBlob) {
-        
-        const formData = new FormData();
-        formData.append('token_admin', token);
-        formData.append('prevencionista_id', rutPrev);
-        formData.append('prevencionista_clave', clavePrev);
-        formData.append('pdf_file', pdfBlob, `Planes_Auditoria_${aud_id}.pdf`);
-        
-        const res = await fetchAPI(`/api/auditorias/${aud_id}/aprobar_planes`, {
-            method: 'POST',
-            body: formData
-        });
-        
-        if(res && res.status === 'success') {
-            alert("Planes aprobados! La auditoria ha sido COMPLETADA y el PDF fue enviado por correo a los mantenedores definidos.");
-            cerrarModal('modal-aprobar-planes');
+        try {
+            const formData = new FormData();
+            formData.append('token_admin', token);
+            formData.append('prevencionista_id', rutPrev);
+            formData.append('prevencionista_clave', clavePrev);
+            formData.append('pdf_file', pdfBlob, `Planes_Auditoria_${aud_id}.pdf`);
             
-            // Descargar tambien localmente
-            const url = window.URL.createObjectURL(pdfBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Planes_Auditoria_${aud_id}.pdf`;
-            a.click();
-            window.URL.revokeObjectURL(url);
+            const res = await fetchAPI(`/api/auditorias/${aud_id}/aprobar_planes`, {
+                method: 'POST',
+                body: formData
+            });
             
-            if (typeof loadPlanesAccion === 'function') loadPlanesAccion();
-            if (typeof loadHistorialAuditorias === 'function') loadHistorialAuditorias();
-        } else {
-            alert(res.detail || "Error al aprobar los planes. Verifique credenciales.");
+            if(res && res.status === 'success') {
+                alert("Planes aprobados! La auditoria ha sido COMPLETADA y el PDF fue enviado por correo a los mantenedores definidos.");
+                cerrarModal('modal-aprobar-planes');
+                
+                // Descargar tambien localmente
+                const url = window.URL.createObjectURL(pdfBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Planes_Auditoria_${aud_id}.pdf`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                
+                if (typeof loadPlanesAccion === 'function') loadPlanesAccion();
+                if (typeof loadHistorialAuditorias === 'function') loadHistorialAuditorias();
+            } else {
+                alert(res.detail || "Error al aprobar los planes. Verifique credenciales.");
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
         }
     });
 }
@@ -3368,36 +3382,51 @@ async function guardarYFirmarPlanes() {
         }
     }
     
-    // Guardar
-    const res = await fetchAPI(`/api/auditorias/guardar_planes`, {
-        method: 'POST',
-        body: JSON.stringify({ planes: planesData })
-    });
-    
-    if(res && res.status === 'success') {
-        alert("Planes guardados correctamente. Se generó un nuevo código (token) enviado al Administrador de Obra.");
-        cerrarModal('modal-ingreso-planes');
-        mostrarModal('modal-aprobar-planes');
+    const btnGuardar = document.querySelector('button[onclick="guardarYFirmarPlanes()"]');
+    let originalGuardarText = 'Guardar y Proceder a Firmar';
+    if (btnGuardar) {
+        originalGuardarText = btnGuardar.innerText;
+        btnGuardar.disabled = true;
+        btnGuardar.innerText = 'Procesando...';
+    }
+
+    try {
+        // Guardar
+        const res = await fetchAPI(`/api/auditorias/guardar_planes`, {
+            method: 'POST',
+            body: JSON.stringify({ planes: planesData })
+        });
         
-        // Simular que llenamos la tabla de seguimiento para que cuando el PDF se genere en el próximo paso
-        // tenga los datos correctos si el usuario no pasó por la pestaña general.
-        const fallbackTable = document.getElementById('tabla-planes-accion');
-        if(fallbackTable) {
-            let html = '';
-            planesData.forEach(p => {
-                html += `<tr>
-                    <td>${p.pregunta_id}</td>
-                    <td style="color: #e74c3c;">No Cumple</td>
-                    <td>-</td>
-                    <td>${p.plan_texto}</td>
-                    <td>${p.fecha_cumplimiento}</td>
-                </tr>`;
-            });
-            fallbackTable.innerHTML = html;
+        if(res && res.status === 'success') {
+            alert("Planes guardados correctamente. Se generó un nuevo código (token) enviado al Administrador de Obra.");
+            cerrarModal('modal-ingreso-planes');
+            mostrarModal('modal-aprobar-planes');
+            
+            // Simular que llenamos la tabla de seguimiento para que cuando el PDF se genere en el próximo paso
+            // tenga los datos correctos si el usuario no pasó por la pestaña general.
+            const fallbackTable = document.getElementById('tabla-planes-accion');
+            if(fallbackTable) {
+                let html = '';
+                planesData.forEach(p => {
+                    html += `<tr>
+                        <td>${p.pregunta_id}</td>
+                        <td style="color: #e74c3c;">No Cumple</td>
+                        <td>-</td>
+                        <td>${p.plan_texto}</td>
+                        <td>${p.fecha_cumplimiento}</td>
+                    </tr>`;
+                });
+                fallbackTable.innerHTML = html;
+            }
+            
+        } else {
+            alert('Error al guardar planes.');
         }
-        
-    } else {
-        alert('Error al guardar planes.');
+    } finally {
+        if (btnGuardar) {
+            btnGuardar.disabled = false;
+            btnGuardar.innerText = originalGuardarText;
+        }
     }
 }
 

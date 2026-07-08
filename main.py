@@ -3873,7 +3873,7 @@ async def get_auditoria_planes_accion(empresa_id: str = None, obra_id: str = Non
         return []
 
 @app.post("/api/auditorias/guardar_planes")
-async def guardar_planes(payload: dict):
+async def guardar_planes(payload: dict, background_tasks: BackgroundTasks):
     planes = payload.get("planes", [])
     if not planes:
         return {"status": "success", "message": "No hay planes"}
@@ -3919,7 +3919,7 @@ async def guardar_planes(payload: dict):
             print(f"======================================\n")
             try:
                 mensaje = f"Estimado Administrador de Obra,\n\nSe han ingresado nuevos Planes de Accion para la auditoria #{aud_id}.\nSu codigo de firma (OTP) es: {token}\n\nPor favor ingrese este codigo en el sistema para confirmar la firma dual.\n\nSaludos,\nSistema de Prevencion."
-                enviar_correo_real("sistema", aud_id, ["Administrador de Obra"], subject=f"Codigo OTP para Firma de Planes - Auditoria #{aud_id}", mensaje=mensaje)
+                background_tasks.add_task(enviar_correo_real, "sistema", aud_id, ["Administrador de Obra"], subject=f"Codigo OTP para Firma de Planes - Auditoria #{aud_id}", mensaje=mensaje)
             except Exception as email_e:
                 print(f"Error al enviar correo OTP: {email_e}")
         
@@ -3978,7 +3978,10 @@ async def aprobar_planes(aud_id: str, token_admin: str = Form(...), prevencionis
                 if not roles_cerrada:
                     roles_cerrada = ["Administrador de Obra", "Prevencionista de Terreno", "Coordinador de Prevencion", "Gerente de Prevencion"]
                 
-                enviar_correo_real("cierre", aud_id, roles_cerrada, pdf_bytes=pdf_bytes, pdf_filename=pdf_filename)
+                if background_tasks:
+                    background_tasks.add_task(enviar_correo_real, "cierre", aud_id, roles_cerrada, pdf_bytes=pdf_bytes, pdf_filename=pdf_filename)
+                else:
+                    enviar_correo_real("cierre", aud_id, roles_cerrada, pdf_bytes=pdf_bytes, pdf_filename=pdf_filename)
             except Exception as e:
                 print(f"Error enviando correo CorreosCerrada: {e}")
                 
