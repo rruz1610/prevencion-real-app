@@ -81,7 +81,7 @@ def _obtener_credenciales_empresa(empresa_id):
     """Helper: obtiene correo emisor y contraseña de la empresa."""
     try:
         df_emp = read_excel_sheet("Empresas")
-        emp = df_emp[df_emp["id"] == empresa_id]
+        emp = df_emp[df_emp["id"].astype(str) == str(empresa_id)]
         if emp.empty:
             return None, None
         emp = emp.iloc[0]
