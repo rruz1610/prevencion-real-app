@@ -4,6 +4,12 @@ from fastapi import FastAPI, HTTPException, File, UploadFile, Form, BackgroundTa
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import sqlite3
+
+def get_db_connection():
+    conn = sqlite3.connect('database.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
 import os
 import shutil
 import pandas as pd
@@ -557,7 +563,7 @@ def read_root():
 
 @app.get("/api/proyectos")
 def get_proyectos():
-    conn = get_db_connection()
+    conn = engine.connect()
     proyectos = conn.execute('SELECT * FROM proyectos').fetchall()
     conn.close()
     return [dict(ix) for ix in proyectos]
@@ -628,11 +634,15 @@ class MaquinariaCreate(BaseModel):
     vigencia_permiso: str | None = None
     vigencia_licencia: str | None = None
     vigencia_examen: str | None = None
+    rut_conductor: str | None = None
+    nombre_conductor: str | None = None
 
 class MaquinariaUpdate(BaseModel):
     vigencia_permiso: str | None = None
     vigencia_licencia: str | None = None
     vigencia_examen: str | None = None
+    rut_conductor: str | None = None
+    nombre_conductor: str | None = None
 
 class LoginRequest(BaseModel):
     rut: str
@@ -660,10 +670,10 @@ def create_maquinaria(maq: MaquinariaCreate):
     try:
         conn.execute('''
             INSERT INTO maquinaria_obra 
-            (empresa_id, obra_id, maquinaria, marca, modelo, patente_codigo, requiere_permiso, vigencia_permiso, vigencia_licencia, vigencia_examen) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (empresa_id, obra_id, maquinaria, marca, modelo, patente_codigo, requiere_permiso, vigencia_permiso, vigencia_licencia, vigencia_examen, rut_conductor, nombre_conductor) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (maq.empresa_id, maq.obra_id, maq.maquinaria, maq.marca, maq.modelo, maq.patente_codigo, 
-              maq.requiere_permiso, maq.vigencia_permiso, maq.vigencia_licencia, maq.vigencia_examen))
+              maq.requiere_permiso, maq.vigencia_permiso, maq.vigencia_licencia, maq.vigencia_examen, maq.rut_conductor, maq.nombre_conductor))
         conn.commit()
     except Exception as e:
         conn.close()
@@ -676,9 +686,9 @@ def update_maquinaria(id: int, maq: MaquinariaUpdate):
     conn = get_db_connection()
     conn.execute('''
         UPDATE maquinaria_obra 
-        SET vigencia_permiso = ?, vigencia_licencia = ?, vigencia_examen = ? 
+        SET vigencia_permiso = ?, vigencia_licencia = ?, vigencia_examen = ?, rut_conductor = ?, nombre_conductor = ?
         WHERE id = ?
-    ''', (maq.vigencia_permiso, maq.vigencia_licencia, maq.vigencia_examen, id))
+    ''', (maq.vigencia_permiso, maq.vigencia_licencia, maq.vigencia_examen, maq.rut_conductor, maq.nombre_conductor, id))
     conn.commit()
     conn.close()
     return {"status": "success", "message": "Fechas actualizadas"}
@@ -2618,14 +2628,37 @@ def get_auditoria_detalle(auditoria_id: str):
     aud_row = aud.iloc[0]
     respuestas_aud = df_resp[df_resp["auditoria_id"].astype(str) == str(auditoria_id)]
     
+    df_preg = _sql_read("AUDIT_", "Preguntas")
+    df_cat = _sql_read("AUDIT_", "Categorias")
+    
     respuestas_list = []
     for _, r in respuestas_aud.iterrows():
+        pid = str(int(r["pregunta_id"]))
+        
+        texto = f"Pregunta {pid}"
+        cid = "0"
+        cat_nombre = f"Nivel {cid}"
+        
+        if not df_preg.empty:
+            preg_match = df_preg[df_preg["id"].astype(str) == pid]
+            if not preg_match.empty:
+                texto = str(preg_match.iloc[0].get("texto", texto))
+                cid = str(preg_match.iloc[0].get("categoria_id", "0"))
+                
+        if not df_cat.empty:
+            cat_match = df_cat[df_cat["id"].astype(str) == cid]
+            if not cat_match.empty:
+                cat_nombre = str(cat_match.iloc[0].get("nombre", cat_nombre))
+
         respuestas_list.append({
-            "pregunta_id": int(r["pregunta_id"]),
+            "pregunta_id": pid,
+            "pregunta_texto": texto,
+            "categoria_id": cid,
+            "categoria_nombre": cat_nombre,
             "estado": str(r["estado"]),
             "observacion": str(r["observacion"])
         })
-        
+
     obra_nombre = ""
     try:
         df_obras = _sql_read("MANT_", "Obras")

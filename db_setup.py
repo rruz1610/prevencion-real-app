@@ -108,7 +108,9 @@ def create_database():
         requiere_permiso BOOLEAN DEFAULT 0,
         vigencia_permiso TEXT,
         vigencia_licencia TEXT,
-        vigencia_examen TEXT
+        vigencia_examen TEXT,
+        rut_conductor TEXT,
+        nombre_conductor TEXT
     )
     ''')
 

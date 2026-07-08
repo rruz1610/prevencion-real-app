@@ -585,6 +585,9 @@ function switchSection(target) {
         if (typeof loadDashboard === 'function') loadDashboard();
     } else if (target === 'planaccion') {
         if (typeof loadPlanesAccion === 'function') loadPlanesAccion();
+    } else if (target === 'maquinaria-obra') {
+        if (typeof cargarMaquinaria === 'function') cargarMaquinaria();
+        if (typeof cargarObrasMaquinaria === 'function') cargarObrasMaquinaria();
     }
 }
 
@@ -3599,31 +3602,58 @@ function generarReportePDF(mode = 'download', aud_id = null, cb = null) {
     let totalCumple = 0, totalNoCumple = 0, totalNA = 0;
     
     const categories = [];
-    document.querySelectorAll('.audit-category').forEach(catDiv => {
-        const catName = catDiv.querySelector('h3').innerText;
-        const qDivs = catDiv.querySelectorAll('.audit-question');
-        const catQuestions = [];
-        let catC = 0, catNC = 0, catNA = 0;
-        
-        qDivs.forEach(qDiv => {
-            const qId = qDiv.dataset.id;
-            const text = qDiv.querySelector('strong').innerText;
-            const r = respuestas.find(x => String(x.pregunta_id) === String(qId));
-            const estado = r ? r.estado : 'Sin responder';
-            const obs = r ? r.observacion : '';
+    const domCategories = document.querySelectorAll('.audit-category');
+    
+    if (domCategories.length > 0) {
+        domCategories.forEach(catDiv => {
+            const catName = catDiv.querySelector('h3').innerText;
+            const qDivs = catDiv.querySelectorAll('.audit-question');
+            const catQuestions = [];
+            let catC = 0, catNC = 0, catNA = 0;
             
-            if(estado === 'Cumple') { catC++; totalCumple++; }
-            else if(estado === 'No Cumple') { catNC++; totalNoCumple++; }
-            else if(estado === 'N/A') { catNA++; totalNA++; }
+            qDivs.forEach(qDiv => {
+                const qId = qDiv.dataset.id;
+                const text = qDiv.querySelector('strong').innerText;
+                const r = respuestas.find(x => String(x.pregunta_id) === String(qId));
+                const estado = r ? r.estado : 'Sin responder';
+                const obs = r ? r.observacion : '';
+                
+                if(estado === 'Cumple') { catC++; totalCumple++; }
+                else if(estado === 'No Cumple') { catNC++; totalNoCumple++; }
+                else if(estado === 'N/A') { catNA++; totalNA++; }
+                
+                catQuestions.push({ text, estado, obs });
+            });
             
-            catQuestions.push({ text, estado, obs });
+            const catTotal = catC + catNC;
+            const catPct = catTotal > 0 ? Math.round((catC / catTotal) * 100) : 0;
+            
+            categories.push({ name: catName, questions: catQuestions, c: catC, nc: catNC, na: catNA, pct: catPct });
+        });
+    } else if (d && d.respuestas) {
+        const grouped = {};
+        d.respuestas.forEach(r => {
+            const cName = r.categoria_nombre || 'Categoría Desconocida';
+            if (!grouped[cName]) {
+                grouped[cName] = { name: cName, questions: [], c: 0, nc: 0, na: 0 };
+            }
+            const text = r.pregunta_texto || 'Pregunta ' + r.pregunta_id;
+            const estado = r.estado || 'Sin responder';
+            const obs = r.observacion || '';
+            
+            if(estado === 'Cumple') { grouped[cName].c++; totalCumple++; }
+            else if(estado === 'No Cumple') { grouped[cName].nc++; totalNoCumple++; }
+            else if(estado === 'N/A') { grouped[cName].na++; totalNA++; }
+            
+            grouped[cName].questions.push({ text, estado, obs });
         });
         
-        const catTotal = catC + catNC;
-        const catPct = catTotal > 0 ? Math.round((catC / catTotal) * 100) : 0;
-        
-        categories.push({ name: catName, questions: catQuestions, c: catC, nc: catNC, na: catNA, pct: catPct });
-    });
+        Object.values(grouped).forEach(cat => {
+            const catTotal = cat.c + cat.nc;
+            cat.pct = catTotal > 0 ? Math.round((cat.c / catTotal) * 100) : 0;
+            categories.push(cat);
+        });
+    }
     
     const totalCount = totalCumple + totalNoCumple;
     const totalPct = totalCount > 0 ? Math.round((totalCumple / totalCount) * 100) : 0;
@@ -3640,9 +3670,9 @@ function generarReportePDF(mode = 'download', aud_id = null, cb = null) {
         else if (cat.pct < 50) color = '#e74c3c'; // red
         
         barsHtml += `
-            <div style="position: relative; height: 8px;">
+            <div style="position: relative; height: 8px; margin-bottom: 30px;">
                 <div style="position: absolute; left: -110px; width: 100px; text-align: right; font-size: 8px; font-weight: bold; color: #2c3e50; top: -2px;">${cat.name}</div>
-                <div style="height: 100%; width: ${cat.pct}%; background-color: ${color}; border-radius: 4px;"></div>
+                <div style="height: 100%; width: ${cat.pct}%; background-color: ${color}; border-radius: 4px; position: relative;"><span style="position: absolute; right: -30px; top: -2px; font-size: 9px; font-weight: bold; color: #2c3e50;">${cat.pct}%</span></div>
             </div>
         `;
     });
@@ -3783,3 +3813,179 @@ function generarReportePDF(mode = 'download', aud_id = null, cb = null) {
         });
     }
 }
+
+// --- MAQUINARIA EN OBRA ---
+
+function toggleFechasMaquinaria() {
+    const maqPermiso = document.getElementById('maq-permiso').checked;
+    const fechasContainer = document.getElementById('maq-fechas-container');
+    if (maqPermiso) {
+        fechasContainer.style.display = 'flex';
+    } else {
+        fechasContainer.style.display = 'none';
+        document.getElementById('maq-vigencia-permiso').value = '';
+        document.getElementById('maq-vigencia-licencia').value = '';
+        document.getElementById('maq-vigencia-examen').value = '';
+        document.getElementById('maq-rut-conductor').value = '';
+        document.getElementById('maq-nombre-conductor').value = '';
+    }
+}
+
+async function guardarMaquinaria(e) {
+    if(e) e.preventDefault();
+    
+    const empresa_id = document.getElementById('maq-empresa').value || null;
+    const obra_id = document.getElementById('maq-obra').value || null;
+    const maquinaria = document.getElementById('maq-nombre').value;
+    const marca = document.getElementById('maq-marca').value;
+    const modelo = document.getElementById('maq-modelo').value;
+    const patente = document.getElementById('maq-patente').value;
+    const permiso = document.getElementById('maq-permiso').checked;
+    const vigencia_permiso = document.getElementById('maq-vigencia-permiso').value;
+    const vigencia_licencia = document.getElementById('maq-vigencia-licencia').value;
+    const vigencia_examen = document.getElementById('maq-vigencia-examen').value;
+    const rut_conductor = document.getElementById('maq-rut-conductor').value;
+    const nombre_conductor = document.getElementById('maq-nombre-conductor').value;
+
+    if(!maquinaria) {
+        alert('Debe ingresar el nombre de la maquinaria');
+        return;
+    }
+
+    const payload = {
+        empresa_id: empresa_id,
+        obra_id: obra_id,
+        maquinaria: maquinaria,
+        marca: marca,
+        modelo: modelo,
+        patente_codigo: patente,
+        requiere_permiso: permiso,
+        vigencia_permiso: permiso ? vigencia_permiso : null,
+        vigencia_licencia: permiso ? vigencia_licencia : null,
+        vigencia_examen: permiso ? vigencia_examen : null,
+        rut_conductor: permiso ? rut_conductor : null,
+        nombre_conductor: permiso ? nombre_conductor : null
+    };
+
+    try {
+        const res = await fetchAPI('/api/maquinaria', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        if(res && res.status === 'success') {
+            alert('Maquinaria guardada exitosamente');
+            // Reset form
+            document.getElementById('maq-nombre').value = '';
+            document.getElementById('maq-marca').value = '';
+            document.getElementById('maq-modelo').value = '';
+            document.getElementById('maq-patente').value = '';
+            document.getElementById('maq-permiso').checked = false;
+            toggleFechasMaquinaria();
+            cargarMaquinaria();
+        } else {
+            alert('Error al guardar maquinaria');
+        }
+    } catch(err) {
+        console.error(err);
+        alert('Error al guardar maquinaria');
+    }
+}
+
+async function cargarMaquinaria() {
+    const tbody = document.getElementById('tabla-maquinaria');
+    if(!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Cargando...</td></tr>';
+    
+    try {
+        const maquinarias = await fetchAPI('/api/maquinaria');
+        if(maquinarias && maquinarias.length > 0) {
+            tbody.innerHTML = maquinarias.map(m => `
+                <tr>
+                    <td>${m.maquinaria || ''}</td>
+                    <td>${m.marca || ''}</td>
+                    <td>${m.modelo || ''}</td>
+                    <td>${m.patente_codigo || ''}</td>
+                    <td>${m.requiere_permiso ? 'SÃ­' : 'No'}</td>
+                    <td>${m.vigencia_permiso || ''}</td>
+                    <td>${m.vigencia_licencia || ''}</td>
+                    <td>${m.vigencia_examen || ''}</td>
+                    <td>${m.rut_conductor || ''}</td>
+                    <td>${m.nombre_conductor || ''}</td>
+                    <td>
+                        <button class="btn-danger btn-sm" onclick="eliminarMaquinaria(${m.id})">Eliminar</button>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;">No hay maquinarias registradas.</td></tr>';
+        }
+    } catch(err) {
+        console.error(err);
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:red;">Error al cargar maquinarias.</td></tr>';
+    }
+}
+
+async function eliminarMaquinaria(id) {
+    if(confirm('Â¿EstÃ¡ seguro de eliminar esta maquinaria?')) {
+        try {
+            const res = await fetchAPI('/api/maquinaria/' + id, { method: 'DELETE' });
+            if(res && res.status === 'success') {
+                cargarMaquinaria();
+            } else {
+                alert('Error al eliminar');
+            }
+        } catch(err) {
+            alert('Error al eliminar');
+        }
+    }
+}
+
+// Escuchar cambios de vista para cargar maquinarias si se abre su tab
+document.querySelectorAll('.nav-links li').forEach(li => {
+    li.addEventListener('click', () => {
+        if(li.dataset.target === 'maquinaria-obra') {
+            cargarMaquinaria();
+        }
+    });
+});
+async function cargarObrasMaquinaria() {
+    const obraSelect = document.getElementById('maq-obra');
+    if (!obraSelect) return;
+    
+    obraSelect.innerHTML = '<option value="">Cargando...</option>';
+    let empId = window.currentEmpresaId || localStorage.getItem('empresa_id');
+    let url = '/api/obras';
+    if (empId) url += `?empresa_id=${empId}`;
+    
+    try {
+        const data = await fetchAPI(url);
+        obraSelect.innerHTML = '<option value="">Seleccione Obra...</option>';
+        if (data) {
+            let userObraId = window.currentObraId || localStorage.getItem('obra_id');
+            data.forEach(o => {
+                if (window.userProfile === 'jefe_obra' || window.userProfile === 'prevencionista' || window.userProfile === 'prevencionista_terreno') {
+                    let userObras = window.userObras || [];
+                    if (userObras.includes(o.id) || o.id == userObraId) {
+                        obraSelect.innerHTML += `<option value="${o.id}">${o.nombre}</option>`;
+                    }
+                } else {
+                    obraSelect.innerHTML += `<option value="${o.id}">${o.nombre}</option>`;
+                }
+            });
+            if (userObraId) {
+                obraSelect.value = userObraId;
+            }
+        }
+    } catch (e) {
+        obraSelect.innerHTML = '<option value="">Error al cargar</option>';
+    }
+}
+
+document.querySelectorAll('.nav-links li').forEach(li => {
+    li.addEventListener('click', () => {
+        if(li.dataset.target === 'maquinaria-obra') {
+            cargarObrasMaquinaria();
+        }
+    });
+});
