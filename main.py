@@ -20,6 +20,12 @@ import jwt
 import bcrypt
 from typing import List
 import json
+import pytz
+
+def obtener_hora_local():
+    tz = pytz.timezone('America/Santiago')
+    return datetime.now(pytz.utc).astimezone(tz).replace(tzinfo=None)
+
 
 SECRET_KEY = "mi-super-secreto-jwt-1234"
 app = FastAPI(title="API PrevenEASY")
@@ -987,7 +993,7 @@ def solicitar_codigo(data: SolicitarCodigo, background_tasks: BackgroundTasks):
 
     from datetime import datetime, timedelta
     import random
-    fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    fecha_actual = obtener_hora_local().strftime("%Y-%m-%d %H:%M:%S")
     
     entrega_id = append_operativos_row("entregas_documentos", {
         "trabajador_id": str(data.trabajador_id),
@@ -999,7 +1005,7 @@ def solicitar_codigo(data: SolicitarCodigo, background_tasks: BackgroundTasks):
     })
     
     codigo_otp = str(random.randint(100000, 999999))
-    expira_en = (datetime.now() + timedelta(minutes=15)).strftime("%Y-%m-%d %H:%M:%S")
+    expira_en = (obtener_hora_local() + timedelta(minutes=15)).strftime("%Y-%m-%d %H:%M:%S")
     
     append_operativos_row("codigos_verificacion", {
         "trabajador_id": str(data.trabajador_id),
@@ -1017,13 +1023,14 @@ def solicitar_codigo(data: SolicitarCodigo, background_tasks: BackgroundTasks):
             subject = f"Código de Verificación - {data.tipo_documento}"
             body = f"Estimado/a {trabajador.get('nombre', 'Trabajador')},\n\nTu código de validación para firmar {data.tipo_documento} es: {codigo_otp}\n\nEste código expira en 15 minutos."
             background_tasks.add_task(_enviar_correo_individual, correo_emisor, contrasena_app, destino, subject, body)
+            return {"status": "success", "message": "Código enviado por correo", "entrega_id": str(entrega_id)}
         else:
             print(f"No hay credenciales de correo configuradas para la empresa {emp_id}. Usando mock.")
             mock_send_notification(data.metodo_envio, destino, codigo_otp, data.tipo_documento)
+            return {"status": "success", "message": "Código simulado (Faltan credenciales de empresa)", "entrega_id": str(entrega_id)}
     else:
         mock_send_notification(data.metodo_envio, destino, codigo_otp, data.tipo_documento)
-    
-    return {"status": "success", "message": "Código enviado", "entrega_id": str(entrega_id)}
+        return {"status": "success", "message": f"Código enviado por {data.metodo_envio}", "entrega_id": str(entrega_id)}
 
 @app.post("/api/entregas/validar-codigo")
 def validar_codigo(data: ValidarCodigo):
@@ -1043,7 +1050,7 @@ def validar_codigo(data: ValidarCodigo):
         raise HTTPException(status_code=400, detail="Código incorrecto")
         
     from datetime import datetime
-    if datetime.now() > datetime.strptime(codigo_record['expira_en'], "%Y-%m-%d %H:%M:%S"):
+    if obtener_hora_local() > datetime.strptime(codigo_record['expira_en'], "%Y-%m-%d %H:%M:%S"):
         raise HTTPException(status_code=400, detail="El código ha expirado")
         
     # Mark code as used
@@ -1155,7 +1162,7 @@ class DenunciaUpdateStatus(BaseModel):
 @app.post("/api/denuncias-karin")
 def create_denuncia(data: DenunciaCreate):
     from datetime import datetime
-    fecha_actual = datetime.now().strftime("%Y-%m-%d")
+    fecha_actual = obtener_hora_local().strftime("%Y-%m-%d")
     append_operativos_row("denuncias_karin", {
         "fecha_denuncia": fecha_actual,
         "denunciante": data.denunciante.upper().strip(),
@@ -1866,8 +1873,8 @@ def iniciar_auditoria(data: AuditoriaIniciar):
         "jefe_obra_id": data.jefe_obra_id or "",
         "auditor_tipo": data.auditor_tipo or "",
         "auditor_id": data.auditor_id or "",
-        "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "fecha_inicio": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "fecha": obtener_hora_local().strftime("%Y-%m-%d %H:%M:%S"),
+        "fecha_inicio": obtener_hora_local().strftime("%Y-%m-%d %H:%M:%S"),
         "fecha_fin": "",
         "comentarios": "",
         "compromisos": "",
@@ -1884,7 +1891,7 @@ def submit_auditoria(data: AuditoriaSubmit):
     try:
         df_aud = _sql_read("AUDIT_", "Auditorias")
         df_resp = _sql_read("AUDIT_", "Respuestas")
-        fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        fecha_actual = obtener_hora_local().strftime("%Y-%m-%d %H:%M:%S")
 
         if "fecha_envio_informe" not in df_aud.columns:
             df_aud["fecha_envio_informe"] = ""
@@ -2520,7 +2527,7 @@ def get_historial_auditorias(empresa_id: str = None, obra_id: str = None):
         if estado_cierre_val == "Pendiente" and fecha_envio_val != "nan" and fecha_envio_val.strip() != "":
             try:
                 dt_envio = datetime.strptime(fecha_envio_val, "%Y-%m-%d %H:%M:%S")
-                if (datetime.now() - dt_envio).total_seconds() > 48 * 3600:
+                if (obtener_hora_local() - dt_envio).total_seconds() > 48 * 3600:
                     estado_cierre_val = "Bloqueado"
             except:
                 pass
@@ -2755,7 +2762,7 @@ def desbloquear_auditoria(auditoria_id: str):
             raise HTTPException(status_code=404, detail="Auditoria no encontrada")
         
         # Reset fecha_envio_informe to now to grant 48 more hours
-        df_aud.loc[idx_aud, "fecha_envio_informe"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        df_aud.loc[idx_aud, "fecha_envio_informe"] = obtener_hora_local().strftime("%Y-%m-%d %H:%M:%S")
         df_aud.loc[idx_aud, "estado_cierre"] = "Pendiente"
         
         _sql_write("AUDIT_", "Auditorias", df_aud)
@@ -2821,7 +2828,7 @@ def update_auditoria(auditoria_id: str, data: AuditoriaUpdate):
         raise HTTPException(status_code=404, detail="Auditoria no encontrada")
         
     # Update fields of audit
-    fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    fecha_actual = obtener_hora_local().strftime("%Y-%m-%d %H:%M:%S")
     df_aud.loc[idx_aud, "obra_id"] = data.obra_id
     df_aud.loc[idx_aud, "fecha"] = data.fecha_fin or fecha_actual
     if "fecha_inicio" in df_aud.columns and data.fecha_inicio:
@@ -3318,7 +3325,7 @@ async def cerrar_plan_accion(
     df_planes.loc[idx, "estado"] = "Cerrado"
     df_planes.loc[idx, "evidencia_texto"] = evidencia_texto
     df_planes.loc[idx, "evidencia_pdf_path"] = json.dumps(saved_paths)
-    df_planes.loc[idx, "fecha_cierre_real"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    df_planes.loc[idx, "fecha_cierre_real"] = obtener_hora_local().strftime("%Y-%m-%d %H:%M:%S")
     
     _sql_write("PLAN_", "Planes", df_planes)
     
@@ -3640,7 +3647,7 @@ def get_auditorias_pendientes_plan(empresa_id: str = None, obra_id: str = None):
     aud_con_nc = df_nc["auditoria_id"].astype(str).unique().tolist()
 
     resultados = []
-    now = datetime.now()
+    now = obtener_hora_local()
 
     for aud_id_str in aud_con_nc:
         aud_rows = df_aud[df_aud["id"].astype(str) == aud_id_str]

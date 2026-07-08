@@ -1037,6 +1037,9 @@ async function iniciarFirmaOdi(trabajadorId, nombre) {
         })
     });
     if (res && res.status === 'success') {
+        if (res.message && res.message.includes('simulado')) {
+            alert("AVISO: " + res.message + ". El código se ha impreso en la consola del servidor.");
+        }
         abrirModalVerificarOtp(res.entrega_id);
     }
 }
@@ -1616,7 +1619,15 @@ function openEditEmpresa(id, rut, nombre, fecha_inicio, fecha_fin, correo_emisor
     document.getElementById('e_fecha_inicio').value = fecha_inicio;
     document.getElementById('e_fecha_fin').value = fecha_fin;
     document.getElementById('e_correo').value = correo_emisor !== 'undefined' ? correo_emisor : '';
-    document.getElementById('e_contrasena').value = ''; // Don't pre-fill password for security, let them type a new one if they want to change it
+    
+    const pwdInput = document.getElementById('e_contrasena');
+    pwdInput.value = ''; // No cargar la contraseña por seguridad
+    if (contrasena_app && contrasena_app !== 'undefined') {
+        pwdInput.placeholder = '(Contraseña ya configurada - Escriba para cambiarla)';
+    } else {
+        pwdInput.placeholder = 'Contraseña de Aplicación - Opcional';
+    }
+    
     mostrarModal('modal-empresa');
 }
 
@@ -2146,7 +2157,7 @@ function renderGanttPlanes(planes) {
     }
 
     // Solo planes con fecha válida (fecha_cumplimiento = plazo de implementación)
-    const conFecha = planes.filter(p => p.plazo && String(p.plazo).trim() !== '');
+    const conFecha = planes.filter(p => p.fecha_cumplimiento && String(p.fecha_cumplimiento).trim() !== '');
     if (conFecha.length === 0) {
         container.innerHTML = '<p style="text-align:center;padding:40px;color:#aaa;">Los planes abiertos no tienen fecha de implementación definida.</p>';
         return;
