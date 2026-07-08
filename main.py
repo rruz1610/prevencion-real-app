@@ -103,10 +103,10 @@ def normalize_role(r: str) -> str:
 
 def _obtener_destinatarios_con_nombre(rol: str, datos_aud: dict):
     """Helper: retorna lista de dicts {correo, nombre} para un rol dado."""
-    obra_id = datos_aud.get("obra_id")
-    empresa_id = datos_aud.get("empresa_id")
-    prevencionista_id = datos_aud.get("prevencionista_id")
-    jefe_obra_id = datos_aud.get("jefe_obra_id")
+    obra_id = str(datos_aud.get("obra_id", ""))
+    empresa_id = str(datos_aud.get("empresa_id", ""))
+    prevencionista_id = str(datos_aud.get("prevencionista_id", ""))
+    jefe_obra_id = str(datos_aud.get("jefe_obra_id", ""))
     resultados = []
     
     n_rol = normalize_role(rol)
@@ -114,15 +114,16 @@ def _obtener_destinatarios_con_nombre(rol: str, datos_aud: dict):
     try:
         if n_rol in ["administrador de obra", "administrador"]:
             df_jefes = read_excel_sheet("JefesObra")
-            if jefe_obra_id and str(jefe_obra_id) not in ('', 'nan', '0', 'None'):
-                try:
-                    jid = int(float(jefe_obra_id))
-                    match = df_jefes[df_jefes["id"] == jid]
-                except:
-                    match = pd.DataFrame()
+            match = pd.DataFrame()
+            if jefe_obra_id and jefe_obra_id not in ('', 'nan', '0', 'None'):
+                match = df_jefes[df_jefes["id"] == jefe_obra_id]
                 if match.empty:
-                    match = df_jefes[df_jefes["obra_id"] == obra_id]
-            else:
+                    try:
+                        jid = str(int(float(jefe_obra_id)))
+                        match = df_jefes[df_jefes["id"] == jid]
+                    except Exception:
+                        pass
+            if match.empty:
                 match = df_jefes[df_jefes["obra_id"] == obra_id]
             for _, row in match.iterrows():
                 correo = str(row.get("correo", "")).strip()
@@ -132,15 +133,16 @@ def _obtener_destinatarios_con_nombre(rol: str, datos_aud: dict):
                     
         elif n_rol in ["prevencionista de terreno", "prevencionista"]:
             df_prev = read_excel_sheet("Prevencionistas")
-            if prevencionista_id and str(prevencionista_id) not in ('', 'nan', '0', 'None'):
-                try:
-                    pid = int(float(prevencionista_id))
-                    match = df_prev[df_prev["id"] == pid]
-                except:
-                    match = pd.DataFrame()
+            match = pd.DataFrame()
+            if prevencionista_id and prevencionista_id not in ('', 'nan', '0', 'None'):
+                match = df_prev[df_prev["id"] == prevencionista_id]
                 if match.empty:
-                    match = df_prev[df_prev["obra_id"] == obra_id]
-            else:
+                    try:
+                        pid = str(int(float(prevencionista_id)))
+                        match = df_prev[df_prev["id"] == pid]
+                    except Exception:
+                        pass
+            if match.empty:
                 match = df_prev[df_prev["obra_id"] == obra_id]
             for _, row in match.iterrows():
                 correo = str(row.get("correo", "")).strip()
