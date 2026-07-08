@@ -362,7 +362,7 @@ from threading import Lock
 
 _cache: dict = {}
 _cache_lock = Lock()
-CACHE_TTL = 30  # segundos de vida por tabla en caché
+CACHE_TTL = 3600  # segundos de vida por tabla en cache (1 hora)
 
 STATIC_TABLES = {
     # Tablas que cambian poco → TTL largo
@@ -972,7 +972,7 @@ class ValidarCodigo(BaseModel):
     empresa_id: str | None = None
 
 @app.post("/api/entregas/solicitar-codigo")
-def solicitar_codigo(data: SolicitarCodigo):
+def solicitar_codigo(data: SolicitarCodigo, background_tasks: BackgroundTasks):
     df_t = read_operativos_sheet("trabajadores")
     t_row = df_t[df_t["id"] == str(data.trabajador_id)]
     
@@ -1010,7 +1010,18 @@ def solicitar_codigo(data: SolicitarCodigo):
         "empresa_id": data.empresa_id or ""
     })
     
-    mock_send_notification(data.metodo_envio, destino, codigo_otp, data.tipo_documento)
+    if data.metodo_envio == 'email':
+        emp_id = data.empresa_id or str(trabajador.get("empresa_id", ""))
+        correo_emisor, contrasena_app = _obtener_credenciales_empresa(emp_id)
+        if correo_emisor and contrasena_app:
+            subject = f"Código de Verificación - {data.tipo_documento}"
+            body = f"Estimado/a {trabajador.get('nombre', 'Trabajador')},\n\nTu código de validación para firmar {data.tipo_documento} es: {codigo_otp}\n\nEste código expira en 15 minutos."
+            background_tasks.add_task(_enviar_correo_individual, correo_emisor, contrasena_app, destino, subject, body)
+        else:
+            print(f"No hay credenciales de correo configuradas para la empresa {emp_id}. Usando mock.")
+            mock_send_notification(data.metodo_envio, destino, codigo_otp, data.tipo_documento)
+    else:
+        mock_send_notification(data.metodo_envio, destino, codigo_otp, data.tipo_documento)
     
     return {"status": "success", "message": "Código enviado", "entrega_id": str(entrega_id)}
 
