@@ -399,6 +399,7 @@ async function performLogin() {
             localStorage.setItem('nombre', data.nombre || 'Usuario');
             localStorage.setItem('empresa_id', data.empresa_id || '');
             localStorage.setItem('obra_id', data.obra_id || '');
+            localStorage.setItem('user_rut', rut);
             
             userProfile = data.perfil;
             currentPrevencionistaId = data.user_id;
@@ -584,7 +585,13 @@ function switchSection(target) {
     } else if (target === 'dashboard') {
         if (typeof loadDashboard === 'function') loadDashboard();
     } else if (target === 'planaccion') {
-        if (typeof loadPlanesAccion === 'function') loadPlanesAccion();
+        if (typeof cargarFiltrosPlanes === 'function') {
+            cargarFiltrosPlanes().then(() => {
+                if (typeof loadPlanesAccion === 'function') loadPlanesAccion();
+            });
+        } else {
+            if (typeof loadPlanesAccion === 'function') loadPlanesAccion();
+        }
     } else if (target === 'maquinaria-obra') {
         if (typeof cargarMaquinaria === 'function') cargarMaquinaria();
         if (typeof cargarObrasMaquinaria === 'function') cargarObrasMaquinaria();
@@ -708,7 +715,7 @@ async function loadDashboard() {
                 // Solo planes abiertos con fecha de cumplimiento
                 const abiertos = planes.filter(p => {
                     const estado = (p.estado || 'Abierto').toLowerCase();
-                    return estado !== 'cerrado' && p.plazo && String(p.plazo).trim() !== '';
+                    return estado !== 'cerrado' && p.fecha_cumplimiento && String(p.fecha_cumplimiento).trim() !== '';
                 });
                 
                 const agrupado = {};
@@ -1277,7 +1284,13 @@ function toggleView(viewName) {
     if (targetView) targetView.style.display = 'block';
     
     if (viewName === 'audit-history') {
-        loadHistorialAuditorias();
+        if (typeof cargarFiltrosHistorial === 'function') {
+            cargarFiltrosHistorial().then(() => {
+                if (typeof loadHistorialAuditorias === 'function') loadHistorialAuditorias();
+            });
+        } else {
+            loadHistorialAuditorias();
+        }
     } else if (viewName === 'audit-execute') {
         populateSelect('/api/obras', 'audit_obra_id', 'nombre');
         populateSelect('/api/auditorias/plantillas', 'audit_plantilla_id', 'nombre');
@@ -1288,9 +1301,96 @@ function toggleView(viewName) {
     }
 }
 
+async function cargarFiltrosHistorial() {
+    await actualizarFiltroObrasHistorial();
+    
+    const selPlantilla = document.getElementById('filtro_plantilla_historial');
+    if(selPlantilla) {
+        selPlantilla.innerHTML = '<option value="">Todas las Plantillas</option>';
+        const pData = await fetchAPI('/api/auditorias/plantillas');
+        if(pData) {
+            pData.forEach(p => {
+                selPlantilla.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
+            });
+        }
+    }
+}
+
+async function actualizarFiltroObrasHistorial() {
+    const selObra = document.getElementById('filtro_obra_historial');
+    if(!selObra) return;
+    selObra.innerHTML = '<option value="">Cargando...</option>';
+    
+    const empIdEl = document.getElementById('filtro_empresa_historial');
+    let empId = empIdEl ? empIdEl.value : '';
+    if ((window.userProfile === 'gerente_prevencion' || window.userProfile === 'coordinador' || window.userProfile === 'gerente') && window.currentEmpresaId && !empId) {
+        empId = window.currentEmpresaId;
+    }
+    
+    let url = '/api/obras';
+    if (empId) url += `?empresa_id=${empId}`;
+    const data = await fetchAPI(url);
+    selObra.innerHTML = '<option value="">Todas las Obras</option>';
+    if(data) {
+        data.forEach(o => {
+            if (window.userProfile === 'jefe_obra' || window.userProfile === 'prevencionista' || window.userProfile === 'prevencionista_terreno') {
+                if (window.userObras && window.userObras.includes(String(o.id))) {
+                    selObra.innerHTML += `<option value="${o.id}">${o.nombre}</option>`;
+                }
+            } else {
+                selObra.innerHTML += `<option value="${o.id}">${o.nombre}</option>`;
+            }
+        });
+    }
+    await actualizarFiltroPrevencionistasHistorial();
+}
+
+async function actualizarFiltroPrevencionistasHistorial() {
+    const selObra = document.getElementById('filtro_obra_historial');
+    const selPrev = document.getElementById('filtro_prevencionista_historial');
+    if(!selPrev) return;
+    selPrev.innerHTML = '<option value="">Todos los Prevencionistas</option>';
+    
+    const data = await fetchAPI('/api/prevencionistas');
+    if(data) {
+        const obraId = selObra ? selObra.value : '';
+        data.forEach(p => {
+            if (!obraId || String(p.obra_id) === String(obraId)) {
+                selPrev.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
+            }
+        });
+    }
+}
+
 async function loadHistorialAuditorias() {
-    let url = '/api/auditorias/historial';
-    if (currentObraId && currentObraId !== "None" && currentObraId !== "nan") url += `?obra_id=${currentObraId}`; else if (window.currentEmpresaId) url += `?empresa_id=${window.currentEmpresaId}`;
+    const empId = document.getElementById('filtro_empresa_historial')?.value || '';
+    const obraId = document.getElementById('filtro_obra_historial')?.value || '';
+    const prevId = document.getElementById('filtro_prevencionista_historial')?.value || '';
+    const plantillaId = document.getElementById('filtro_plantilla_historial')?.value || '';
+    const mesId = document.getElementById('filtro_mes_historial')?.value || '';
+    const anioId = document.getElementById('filtro_anio_historial')?.value || '';
+    
+    const queryParams = new URLSearchParams();
+    
+    let finalEmpId = empId;
+    if ((window.userProfile === 'gerente_prevencion' || window.userProfile === 'coordinador' || window.userProfile === 'gerente') && window.currentEmpresaId && !finalEmpId) {
+        finalEmpId = window.currentEmpresaId;
+    }
+    
+    if (finalEmpId) queryParams.append('empresa_id', finalEmpId);
+    
+    let finalObraId = obraId;
+    if (currentObraId && currentObraId !== "None" && currentObraId !== "nan" && !finalObraId) {
+        finalObraId = currentObraId;
+    }
+    
+    if (finalObraId) queryParams.append('obra_id', finalObraId);
+    if (prevId) queryParams.append('prevencionista_id', prevId);
+    if (plantillaId) queryParams.append('plantilla_id', plantillaId);
+    if (mesId) queryParams.append('mes', mesId);
+    if (anioId) queryParams.append('anio', anioId);
+    
+    let url = `/api/auditorias/historial?${queryParams.toString()}`;
     const cacheUrl = url.includes("?") ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`;
     const data = await fetchAPI(cacheUrl);
     const tbody = document.getElementById('tabla-historial-auditorias');
@@ -1996,11 +2096,47 @@ function descargarPDFAuditoria() {
 
 function abrirFirmaAuditoria() {
     cerrarModal('modal-revisar-auditoria');
+    
+    // Limpiar claves
+    const elCoordClave = document.getElementById('firma_coord_clave');
+    if (elCoordClave) elCoordClave.value = '';
+    const elPrevClave = document.getElementById('firma_prev_clave');
+    if (elPrevClave) elPrevClave.value = '';
+
+    // Autocompletar RUT del prevencionista
+    const elPrevRut = document.getElementById('firma_prev_rut');
+    if (elPrevRut) {
+        // Opción 1: desde el select si la auditoría está en curso (audit-execute)
+        const prevSelect = document.getElementById('audit_prevencionista_id');
+        let prevRutFilled = false;
+        if(prevSelect && prevSelect.selectedIndex >= 0) {
+            const text = prevSelect.options[prevSelect.selectedIndex].text;
+            const match = text.match(/\((.*?)\)/);
+            if(match) {
+                elPrevRut.value = match[1];
+                prevRutFilled = true;
+            }
+        }
+        
+        // Opción 2: desde currentAuditData si la auditoría viene del historial
+        if (!prevRutFilled && window.currentAuditData && window.currentAuditData.prevencionista_rut) {
+            elPrevRut.value = window.currentAuditData.prevencionista_rut;
+        }
+    }
+    
+    // Autocompletar RUT del usuario logueado (si es perfil coordinador, gerente o admin)
+    const userRut = localStorage.getItem('user_rut');
+    if (userRut && document.getElementById('firma_coord_rut')) {
+        if (['admin', 'gerente', 'gerente_prevencion', 'coordinador_prevencion', 'jefe_obra'].includes(userProfile)) {
+            document.getElementById('firma_coord_rut').value = userRut;
+        }
+    }
+
     mostrarModal('modal-aprobar-cierre');
 }
 
 function solicitarCierreAuditoria() {
-    mostrarModal('modal-aprobar-cierre');
+    abrirFirmaAuditoria(); // Reutilizamos la misma lógica
 }
 
 async function confirmarCierreAuditoria() {
@@ -2011,50 +2147,124 @@ async function confirmarCierreAuditoria() {
     
     if(!coordRut || !coordClave || !prevRut || !prevClave) return alert("Debe ingresar RUT y clave de ambos responsables");
     
-    // Enviar las respuestas definitivas primero
-    const respuestas = collectAuditResponses();
-    const payload = {
-        auditoria_id: window.currentAuditoriaId,
-        plantilla_id: document.getElementById('audit_plantilla_id').value,
-        obra_id: document.getElementById('audit_obra_id').value,
-        prevencionista_id: document.getElementById('audit_prevencionista_id').value,
-        jefe_obra_id: document.getElementById('audit_jefe_obra_id').value,
-        auditor_tipo: userProfile,
-        auditor_id: currentPrevencionistaId || 'admin',
-        estado: "Finalizada",
-        respuestas: respuestas
-    };
+    const btnCerrar = document.querySelector('#modal-aprobar-cierre .btn-primary');
+    const originalText = btnCerrar ? btnCerrar.innerText : "Cerrar Auditoría";
+    if (btnCerrar) {
+        btnCerrar.innerText = "Cerrando, por favor espere...";
+        btnCerrar.disabled = true;
+        btnCerrar.style.opacity = '0.5';
+    }
     
-    // Primero intentamos aprobar el cierre con las firmas (esto debería validarlo el backend)
-    const resAprobar = await fetchAPI(`/api/auditorias/${window.currentAuditoriaId}/aprobar_cierre`, {
-        method: 'POST',
-        body: JSON.stringify({
-            coordinador_id: coordRut,
-            coordinador_clave: coordClave,
-            prevencionista_id: prevRut,
-            prevencionista_clave: prevClave
-        })
-    });
-    
-    if (resAprobar && resAprobar.status === 'success') {
-        // Si las firmas son válidas, enviamos las respuestas finales
-        const resRespuestas = await fetchAPI('/api/auditorias/respuestas', {
+    try {
+        const respuestas = collectAuditResponses();
+        const payload = {
+            auditoria_id: window.currentAuditoriaId,
+            plantilla_id: document.getElementById('audit_plantilla_id').value,
+            obra_id: document.getElementById('audit_obra_id').value,
+            prevencionista_id: document.getElementById('audit_prevencionista_id').value,
+            jefe_obra_id: document.getElementById('audit_jefe_obra_id').value,
+            auditor_tipo: userProfile,
+            auditor_id: currentPrevencionistaId || 'admin',
+            estado: "Finalizada",
+            respuestas: respuestas
+        };
+        
+        const resAprobar = await fetchAPI(`/api/auditorias/${window.currentAuditoriaId}/aprobar_cierre`, {
             method: 'POST',
-            body: JSON.stringify(payload)
+            body: JSON.stringify({
+                coordinador_id: coordRut,
+                coordinador_clave: coordClave,
+                prevencionista_id: prevRut,
+                prevencionista_clave: prevClave
+            })
         });
         
-        if (resRespuestas && resRespuestas.status === 'success') {
-            alert("Auditoría firmada y cerrada exitosamente.");
-            cerrarModal('modal-aprobar-cierre');
-            document.getElementById('audit-form-container').style.display = 'none';
-            document.getElementById('audit-setup-container').style.display = 'block';
-            window.currentAuditoriaId = null;
-            toggleView('audit-history');
+        if (resAprobar && resAprobar.status === 'success') {
+            const resRespuestas = await fetchAPI('/api/auditorias/respuestas', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            
+            if (resRespuestas && resRespuestas.status === 'success') {
+                alert("Auditoría firmada y cerrada exitosamente.");
+                cerrarModal('modal-aprobar-cierre');
+                document.getElementById('audit-form-container').style.display = 'none';
+                document.getElementById('audit-setup-container').style.display = 'block';
+                window.currentAuditoriaId = null;
+                toggleView('audit-history');
+            }
+        }
+    } finally {
+        if (btnCerrar) {
+            btnCerrar.innerText = originalText;
+            btnCerrar.disabled = false;
+            btnCerrar.style.opacity = '1';
         }
     }
 }
 
 // === PLANES DE ACCION ===
+async function cargarFiltrosPlanes() {
+    await actualizarFiltroObrasPlanes();
+    
+    const selPlantilla = document.getElementById('filtro_plantilla_planes');
+    if(selPlantilla) {
+        selPlantilla.innerHTML = '<option value="">Todas las Plantillas</option>';
+        const pData = await fetchAPI('/api/auditorias/plantillas');
+        if(pData) {
+            pData.forEach(p => {
+                selPlantilla.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
+            });
+        }
+    }
+}
+
+async function actualizarFiltroObrasPlanes() {
+    const selObra = document.getElementById('filtro_obra_planes');
+    if(!selObra) return;
+    selObra.innerHTML = '<option value="">Cargando...</option>';
+    
+    const empIdEl = document.getElementById('filtro_empresa_planes');
+    let empId = empIdEl ? empIdEl.value : '';
+    if ((window.userProfile === 'gerente_prevencion' || window.userProfile === 'coordinador' || window.userProfile === 'gerente') && window.currentEmpresaId && !empId) {
+        empId = window.currentEmpresaId;
+    }
+    
+    let url = '/api/obras';
+    if (empId) url += `?empresa_id=${empId}`;
+    const data = await fetchAPI(url);
+    selObra.innerHTML = '<option value="">Todas las Obras</option>';
+    if(data) {
+        data.forEach(o => {
+            if (window.userProfile === 'jefe_obra' || window.userProfile === 'prevencionista' || window.userProfile === 'prevencionista_terreno') {
+                if (window.userObras && window.userObras.includes(String(o.id))) {
+                    selObra.innerHTML += `<option value="${o.id}">${o.nombre}</option>`;
+                }
+            } else {
+                selObra.innerHTML += `<option value="${o.id}">${o.nombre}</option>`;
+            }
+        });
+    }
+    await actualizarFiltroPrevencionistasPlanes();
+}
+
+async function actualizarFiltroPrevencionistasPlanes() {
+    const selObra = document.getElementById('filtro_obra_planes');
+    const selPrev = document.getElementById('filtro_prevencionista_planes');
+    if(!selPrev) return;
+    selPrev.innerHTML = '<option value="">Todos los Prevencionistas</option>';
+    
+    const data = await fetchAPI('/api/prevencionistas');
+    if(data) {
+        const obraId = selObra ? selObra.value : '';
+        data.forEach(p => {
+            if (!obraId || String(p.obra_id) === String(obraId)) {
+                selPrev.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
+            }
+        });
+    }
+}
+
 async function loadPlanesAccion() {
     const tbody = document.getElementById('tabla-planes-accion');
     if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Cargando planes...</td></tr>';
@@ -2062,11 +2272,19 @@ async function loadPlanesAccion() {
     const empId = document.getElementById('filtro_empresa_planes')?.value || '';
     const obraId = document.getElementById('filtro_obra_planes')?.value || '';
     const prevId = document.getElementById('filtro_prevencionista_planes')?.value || '';
+    const plantillaId = document.getElementById('filtro_plantilla_planes')?.value || '';
+    const mesId = document.getElementById('filtro_mes_planes')?.value || '';
 
     const queryParams = new URLSearchParams();
-    if (empId) queryParams.append('empresa_id', empId);
+    let finalEmpId = empId;
+    if ((window.userProfile === 'gerente_prevencion' || window.userProfile === 'coordinador' || window.userProfile === 'gerente') && window.currentEmpresaId && !finalEmpId) {
+        finalEmpId = window.currentEmpresaId;
+    }
+    if (finalEmpId) queryParams.append('empresa_id', finalEmpId);
     if (obraId) queryParams.append('obra_id', obraId);
     if (prevId) queryParams.append('prevencionista_id', prevId);
+    if (plantillaId) queryParams.append('plantilla_id', plantillaId);
+    if (mesId) queryParams.append('mes', mesId);
 
     const todos = await fetchAPI(`/api/planes_accion?${queryParams}`);
 
@@ -2621,7 +2839,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function actualizarFiltrosReportabilidad() {
     const empresaIdEl = document.getElementById('filtro_empresa_rep');
     let empresaId = empresaIdEl ? empresaIdEl.value : '';
-    if(window.userProfile === 'gerente_prevencion' && window.currentEmpresaId && !empresaId) {
+    if((window.userProfile === 'gerente_prevencion' || window.userProfile === 'coordinador' || window.userProfile === 'gerente') && window.currentEmpresaId && !empresaId) {
         empresaId = window.currentEmpresaId;
     }
     const obraSelect = document.getElementById('filtro_obra_rep');
@@ -2758,7 +2976,7 @@ function calcularTotalTrabajadoresRep() {
 async function actualizarFiltroObrasGr() {
     const empresaIdEl = document.getElementById('filtro_empresa_gr');
     let empresaId = empresaIdEl ? empresaIdEl.value : '';
-    if(window.userProfile === 'gerente_prevencion' && window.currentEmpresaId && !empresaId) {
+    if((window.userProfile === 'gerente_prevencion' || window.userProfile === 'coordinador' || window.userProfile === 'gerente') && window.currentEmpresaId && !empresaId) {
         empresaId = window.currentEmpresaId;
     }
     const obraSelect = document.getElementById('filtro_obra_gr');
@@ -2789,22 +3007,59 @@ async function actualizarFiltroObrasGr() {
             }
         }
     }
+    
+    await actualizarFiltrosExtrasGr();
+    
     cargarGraficosReportabilidad();
+}
+
+async function actualizarFiltrosExtrasGr() {
+    const selPlantilla = document.getElementById('filtro_plantilla_gr');
+    if(selPlantilla) {
+        selPlantilla.innerHTML = '<option value="">Todas las Plantillas</option>';
+        const pData = await fetchAPI('/api/auditorias/plantillas');
+        if(pData) {
+            pData.forEach(p => {
+                selPlantilla.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
+            });
+        }
+    }
+    
+    const selObra = document.getElementById('filtro_obra_gr');
+    const selPrev = document.getElementById('filtro_prevencionista_gr');
+    if(selPrev) {
+        selPrev.innerHTML = '<option value="">Todos los Prevencionistas</option>';
+        const data = await fetchAPI('/api/prevencionistas');
+        if(data) {
+            const obraId = selObra ? selObra.value : '';
+            data.forEach(p => {
+                if (!obraId || String(p.obra_id) === String(obraId)) {
+                    selPrev.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
+                }
+            });
+        }
+    }
 }
 
 async function cargarGraficosReportabilidad() {
     const empresaIdEl = document.getElementById('filtro_empresa_gr');
     let empresaId = empresaIdEl ? empresaIdEl.value : '';
-    if(window.userProfile === 'gerente_prevencion' && window.currentEmpresaId && !empresaId) {
+    if((window.userProfile === 'gerente_prevencion' || window.userProfile === 'coordinador' || window.userProfile === 'gerente') && window.currentEmpresaId && !empresaId) {
         empresaId = window.currentEmpresaId;
     }
     const obraId = document.getElementById('filtro_obra_gr') ? document.getElementById('filtro_obra_gr').value : '';
     const anio = document.getElementById('filtro_anio_gr') ? document.getElementById('filtro_anio_gr').value : '';
+    const mes = document.getElementById('filtro_mes_gr') ? document.getElementById('filtro_mes_gr').value : '';
+    const plantillaId = document.getElementById('filtro_plantilla_gr') ? document.getElementById('filtro_plantilla_gr').value : '';
+    const prevencionistaId = document.getElementById('filtro_prevencionista_gr') ? document.getElementById('filtro_prevencionista_gr').value : '';
     
     let url = '/api/reportabilidad-mensual/historial?';
     if (empresaId) url += `empresa_id=${empresaId}&`;
     if (obraId) url += `obra_id=${obraId}&`;
     if (anio) url += `anio=${anio}&`;
+    if (mes) url += `mes=${mes}&`;
+    if (plantillaId) url += `plantilla_id=${plantillaId}&`;
+    if (prevencionistaId) url += `prevencionista_id=${prevencionistaId}&`;
     
     const cacheUrl = url.includes("?") ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`;
     const data = await fetchAPI(cacheUrl);
@@ -2813,6 +3068,7 @@ async function cargarGraficosReportabilidad() {
         return;
     }
     
+    window._reportabilidadRawData = data;
     let dataAsc = [...data].reverse();
     
     const groupedDataMap = new Map();
@@ -2856,7 +3112,7 @@ async function cargarGraficosReportabilidad() {
 
     const sumHombres = dataAsc.reduce((acc, r) => acc + (r.hombres || 0), 0);
     const sumMujeres = dataAsc.reduce((acc, r) => acc + (r.mujeres || 0), 0);
-    
+
     // 1. chartEvolucionTrabajadores
     const canvasEv = document.getElementById('chartEvolucionTrabajadores');
     if (canvasEv) {
@@ -2870,7 +3126,16 @@ async function cargarGraficosReportabilidad() {
                     { label: 'Vigilancia Médica', data: trabVig, borderColor: '#e74c3c', backgroundColor: 'rgba(231, 76, 60, 0.2)', fill: true, tension: 0.1 }
                 ]
             },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+            options: { 
+                responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } },
+                onClick: (evt, activeElements) => {
+                    if (activeElements.length > 0) {
+                        const idx = activeElements[0].index;
+                        const mesLabel = meses[idx];
+                        mostrarModalReportabilidadObraMes(mesLabel, 'trabajadores');
+                    }
+                }
+            }
         });
     }
 
@@ -2888,7 +3153,16 @@ async function cargarGraficosReportabilidad() {
                     { label: 'Jornadas Perdidas', data: jornadas, backgroundColor: '#c0392b' }
                 ]
             },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+            options: { 
+                responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } },
+                onClick: (evt, activeElements) => {
+                    if (activeElements.length > 0) {
+                        const idx = activeElements[0].index;
+                        const mesLabel = meses[idx];
+                        mostrarModalReportabilidadObraMes(mesLabel, 'siniestralidad');
+                    }
+                }
+            }
         });
     }
 
@@ -2902,7 +3176,12 @@ async function cargarGraficosReportabilidad() {
                 labels: ['Hombres', 'Mujeres'],
                 datasets: [{ data: [sumHombres, sumMujeres], backgroundColor: ['#3498db', '#9b59b6'] }]
             },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            options: { 
+                responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } },
+                onClick: (evt, activeElements) => {
+                    mostrarModalReportabilidadObraMes(null, 'genero');
+                }
+            }
         });
     }
 
@@ -2916,11 +3195,95 @@ async function cargarGraficosReportabilidad() {
                 labels: meses,
                 datasets: [{ label: 'Horas Trabajadas', data: horas, backgroundColor: '#2ecc71' }]
             },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+            options: { 
+                responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } },
+                onClick: (evt, activeElements) => {
+                    if (activeElements.length > 0) {
+                        const idx = activeElements[0].index;
+                        const mesLabel = meses[idx];
+                        mostrarModalReportabilidadObraMes(mesLabel, 'horas');
+                    }
+                }
+            }
         });
     }
 
     renderTablasResumenAnual(dataAsc);
+}
+
+function mostrarModalReportabilidadObraMes(mesLabel, chartType) {
+    const data = window._reportabilidadRawData || [];
+    let filtered = data;
+    if (mesLabel) {
+        const [anio, mes] = mesLabel.split('-');
+        filtered = data.filter(d => String(d.anio) === String(anio) && String(d.mes) === String(mes));
+    }
+    
+    // Agrupar por obra
+    const agrupado = {};
+    filtered.forEach(r => {
+        const obra = r.obra_nombre || 'Sin Obra';
+        if (!agrupado[obra]) {
+            agrupado[obra] = {
+                total_trabajadores: 0, trabajadores_vigilancia: 0,
+                accidentes_con_baja: 0, enfermedades_profesionales: 0, jornadas_perdidas: 0, jornadas_perdidas_ep: 0,
+                horas_trabajadas: 0, hombres: 0, mujeres: 0
+            };
+        }
+        agrupado[obra].total_trabajadores += parseFloat(r.total_trabajadores || 0);
+        agrupado[obra].trabajadores_vigilancia += parseFloat(r.trabajadores_vigilancia || 0);
+        agrupado[obra].accidentes_con_baja += parseFloat(r.accidentes_con_baja || 0);
+        agrupado[obra].enfermedades_profesionales += parseFloat(r.enfermedades_profesionales || 0);
+        agrupado[obra].jornadas_perdidas += parseFloat(r.jornadas_perdidas || 0);
+        agrupado[obra].jornadas_perdidas_ep += parseFloat(r.jornadas_perdidas_ep || 0);
+        agrupado[obra].horas_trabajadas += parseFloat(r.horas_trabajadas || 0);
+        agrupado[obra].hombres += parseFloat(r.hombres || 0);
+        agrupado[obra].mujeres += parseFloat(r.mujeres || 0);
+    });
+    
+    const labelsObra = Object.keys(agrupado);
+    let datasets = [];
+    let titleText = `Detalle por Obra${mesLabel ? ` (${mesLabel})` : ''}`;
+    
+    if (chartType === 'trabajadores') {
+        datasets = [
+            { label: 'Total Trabajadores', data: labelsObra.map(o => agrupado[o].total_trabajadores), backgroundColor: '#3498db' },
+            { label: 'Vigilancia Médica', data: labelsObra.map(o => agrupado[o].trabajadores_vigilancia), backgroundColor: '#e74c3c' }
+        ];
+        titleText = 'Evolución de Trabajadores - ' + titleText;
+    } else if (chartType === 'siniestralidad') {
+        datasets = [
+            { label: 'Accidentes CTP', data: labelsObra.map(o => agrupado[o].accidentes_con_baja), backgroundColor: '#f1c40f' },
+            { label: 'Enfermedades Prof.', data: labelsObra.map(o => agrupado[o].enfermedades_profesionales), backgroundColor: '#e67e22' },
+            { label: 'Jornadas Perdidas', data: labelsObra.map(o => agrupado[o].jornadas_perdidas + agrupado[o].jornadas_perdidas_ep), backgroundColor: '#c0392b' }
+        ];
+        titleText = 'Siniestralidad - ' + titleText;
+    } else if (chartType === 'genero') {
+        datasets = [
+            { label: 'Hombres', data: labelsObra.map(o => agrupado[o].hombres), backgroundColor: '#3498db' },
+            { label: 'Mujeres', data: labelsObra.map(o => agrupado[o].mujeres), backgroundColor: '#9b59b6' }
+        ];
+        titleText = 'Distribución de Género - ' + titleText;
+    } else if (chartType === 'horas') {
+        datasets = [
+            { label: 'Horas Trabajadas', data: labelsObra.map(o => agrupado[o].horas_trabajadas), backgroundColor: '#2ecc71' }
+        ];
+        titleText = 'Horas Trabajadas - ' + titleText;
+    }
+    
+    const canvas = document.getElementById('chart-detalle-reportabilidad-obra');
+    if (!canvas) return;
+    if (window._chartModalRepObra) window._chartModalRepObra.destroy();
+    
+    document.getElementById('titulo-modal-reportabilidad-obra').innerText = titleText;
+    
+    window._chartModalRepObra = new Chart(canvas, {
+        type: 'bar',
+        data: { labels: labelsObra, datasets: datasets },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+    });
+    
+    document.getElementById('modal-detalle-reportabilidad-obra').style.display = 'flex';
 }
 
 function renderTablasResumenAnual(data) {
@@ -2963,38 +3326,181 @@ function renderTablasResumenAnual(data) {
     populate('tabla-resumen-anio3', anio3Data);
 }
 
-function exportarResumenAnualExcel() {
-    if (typeof XLSX === 'undefined') {
-        alert("La librería para exportar a Excel no está cargada.");
+async function exportarResumenAnualExcel() {
+    if (typeof ExcelJS === 'undefined') {
+        alert("La librería ExcelJS no está cargada.");
         return;
     }
-    const wb = XLSX.utils.book_new();
-    let data = [["Período", "Mes-Año", "Trabajadores", "Días Perdidos"]];
-    
-    const extractToData = (id, yearLabel) => {
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Resumen Anual');
+
+    // Helper to extract data directly from HTML table to respect filters
+    const extractFromDOM = (id) => {
         const tbody = document.getElementById(id);
-        if (!tbody) return;
+        let tableData = {};
+        if (tbody) {
+            const rows = tbody.querySelectorAll('tr');
+            rows.forEach(row => {
+                const cols = row.querySelectorAll('td');
+                if(cols.length === 3) {
+                    const mesAnio = cols[0].innerText.trim();
+                    if (mesAnio !== '-' && !mesAnio.includes('Sin datos')) {
+                        const parts = mesAnio.split('-');
+                        if (parts.length === 2) {
+                            tableData[`${parseInt(parts[0], 10)}`] = {
+                                t: parseInt(cols[1].innerText) || 0,
+                                d: parseInt(cols[2].innerText) || 0
+                            };
+                        }
+                    }
+                }
+            });
+        }
+        return tableData;
+    };
+
+    const months = [
+        {m: 7, name: 'jul'}, {m: 8, name: 'ago'}, {m: 9, name: 'sept'},
+        {m: 10, name: 'oct'}, {m: 11, name: 'nov'}, {m: 12, name: 'dic'},
+        {m: 1, name: 'ene'}, {m: 2, name: 'feb'}, {m: 3, name: 'mar'},
+        {m: 4, name: 'abr'}, {m: 5, name: 'may'}, {m: 6, name: 'jun'}
+    ];
+
+    const d1 = extractFromDOM('tabla-resumen-anio1');
+    const d2 = extractFromDOM('tabla-resumen-anio2');
+    const d3 = extractFromDOM('tabla-resumen-anio3');
+
+    const generateBlockData = (startYear, dataMap) => {
+        let rows = [];
+        let totalMasa = 0;
+        let totalDias = 0;
         
-        const rows = tbody.querySelectorAll('tr');
-        rows.forEach(row => {
-            const cols = row.querySelectorAll('td');
-            if(cols.length === 3) {
-                const mes = cols[0].innerText;
-                if(mes === '-' || mes.includes('Sin datos')) return;
-                data.push([yearLabel, mes, cols[1].innerText, cols[2].innerText]);
-            }
+        months.forEach(mo => {
+            const y = mo.m >= 7 ? startYear : startYear + 1;
+            const yy = String(y).substring(2,4);
+            const label = `${mo.name}-${yy}`;
+            const stats = dataMap[mo.m] || { t: 0, d: 0 };
+            
+            rows.push({ label, masa: stats.t, dias: stats.d });
+            totalMasa += stats.t;
+            totalDias += stats.d;
         });
+        
+        const masaPromedio = Math.round(totalMasa / 12);
+        const tasa = masaPromedio > 0 ? Math.round((totalDias / masaPromedio) * 100) : 0;
+        
+        return { rows, totalMasa, totalDias, masaPromedio, tasa };
+    };
+
+    const b1 = generateBlockData(2024, d1);
+    const b2 = generateBlockData(2025, d2);
+    const b3 = generateBlockData(2026, d3);
+
+    const fillTitle = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF92D050' } };
+    const fillHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF92D050' } };
+    const borderAll = {
+        top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'}
     };
     
-    extractToData('tabla-resumen-anio1', 'Año 1 (Jul 2024 - Jun 2025)');
-    data.push(["", "", "", ""]); // Fila vacía de separación
-    extractToData('tabla-resumen-anio2', 'Año 2 (Jul 2025 - Jun 2026)');
-    data.push(["", "", "", ""]);
-    extractToData('tabla-resumen-anio3', 'Año 3 (Jul 2026 - Jun 2027)');
+    sheet.getColumn(1).width = 12;
+    sheet.getColumn(2).width = 12;
+    sheet.getColumn(3).width = 12;
+    sheet.getColumn(4).width = 4;
+    sheet.getColumn(5).width = 12;
+    sheet.getColumn(6).width = 12;
+    sheet.getColumn(7).width = 12;
+    sheet.getColumn(8).width = 4;
+    sheet.getColumn(9).width = 12;
+    sheet.getColumn(10).width = 12;
+    sheet.getColumn(11).width = 12;
+
+    const d = new Date();
+    const todayStr = `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
+
+    const r1 = sheet.addRow(["SIMULACIÓN TASA DE SINIESTRALIDAD TOTAL PROYECTADA", "", "", "", "", "", todayStr]);
+    sheet.mergeCells('A1:E1');
+    r1.getCell(1).font = { bold: true, underline: true };
+    r1.getCell(7).font = { bold: true };
     
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, "Resumen Anual");
-    XLSX.writeFile(wb, "Resumen_Anual_Reportabilidad.xlsx");
+    const r2 = sheet.addRow([]);
+    r2.height = 10;
+    for(let c=1; c<=11; c++) { r2.getCell(c).fill = fillTitle; }
+
+    const r3 = sheet.addRow(["jul 2024-jun 2025", "", "", "", "jul 2025-jun 2026", "", "", "", "jul 2026-jun 2027", "", ""]);
+    sheet.mergeCells('A3:C3');
+    sheet.mergeCells('E3:G3');
+    sheet.mergeCells('I3:K3');
+    [1, 5, 9].forEach(col => {
+        const cell = r3.getCell(col);
+        cell.font = { bold: true, size: 12 };
+        cell.alignment = { horizontal: 'center' };
+    });
+
+    const r4 = sheet.addRow(["Meses", "Masa", "Dias Perd.", "", "Meses", "Masa", "Dias Perd.", "", "Meses", "Masa", "Dias Perd."]);
+    [1,2,3,5,6,7,9,10,11].forEach(col => {
+        const cell = r4.getCell(col);
+        cell.fill = fillHeader;
+        cell.font = { bold: true };
+        cell.border = borderAll;
+        cell.alignment = { horizontal: 'center' };
+    });
+
+    for (let i = 0; i < 12; i++) {
+        const row = sheet.addRow([
+            b1.rows[i].label, b1.rows[i].masa, b1.rows[i].dias, "",
+            b2.rows[i].label, b2.rows[i].masa, b2.rows[i].dias, "",
+            b3.rows[i].label, b3.rows[i].masa, b3.rows[i].dias
+        ]);
+        [1,2,3,5,6,7,9,10,11].forEach(col => {
+            row.getCell(col).border = borderAll;
+            if(col === 1 || col === 5 || col === 9) row.getCell(col).alignment = { horizontal: 'left' };
+            else row.getCell(col).alignment = { horizontal: 'center' };
+        });
+    }
+
+    const rTotal = sheet.addRow([
+        "Total", b1.totalMasa, b1.totalDias, "",
+        "Total", b2.totalMasa, b2.totalDias, "",
+        "Total", b3.totalMasa, b3.totalDias
+    ]);
+    [1,2,3,5,6,7,9,10,11].forEach(col => {
+        const cell = rTotal.getCell(col);
+        cell.border = borderAll;
+        cell.font = { bold: true };
+        cell.alignment = col % 4 === 1 ? { horizontal: 'left' } : { horizontal: 'center' };
+    });
+
+    const rMasa = sheet.addRow([
+        "Masa Promedio", b1.masaPromedio, "", "",
+        "Masa Promedio", b2.masaPromedio, "", "",
+        "Masa Promedio", b3.masaPromedio, ""
+    ]);
+    const rTasa = sheet.addRow([
+        "Tasa de Siniestr.", b1.tasa, "", "",
+        "Tasa de Siniestr.", b2.tasa, "", "",
+        "Tasa de Siniestr.", b3.tasa, ""
+    ]);
+    
+    [rMasa, rTasa].forEach(row => {
+        [1,2,5,6,9,10].forEach(col => {
+            const cell = row.getCell(col);
+            cell.border = borderAll;
+            cell.font = { bold: true };
+            cell.alignment = col % 4 === 1 ? { horizontal: 'left' } : { horizontal: 'center' };
+        });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "Simulacion_Siniestralidad.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
 }
 
 function descargarReporteMensualPDF() {
@@ -3331,6 +3837,82 @@ async function cargarGraficos() {
                 }
             }
         });
+    }
+
+    // === Gráfico: Planes de Acción Abiertos por Obra (en Reportes) ===
+    const ctxPlanes = document.getElementById('chartPlanesAccionObra');
+    if (ctxPlanes) {
+        let planesUrl = '/api/planes_accion?';
+        if (empId) planesUrl += `empresa_id=${empId}&`;
+        if (obraId) planesUrl += `obra_id=${obraId}&`;
+        if (planId) planesUrl += `plantilla_id=${planId}&`;
+        if (prevId) planesUrl += `prevencionista_id=${prevId}&`;
+        if (mes) planesUrl += `mes=${mes}&`;
+        if (anio) planesUrl += `anio=${anio}&`;
+        
+        try {
+            const cachePlanesUrl = planesUrl.includes("?") ? `${planesUrl}&_t=${Date.now()}` : `${planesUrl}?_t=${Date.now()}`;
+            const planes = await fetchAPI(cachePlanesUrl);
+            
+            const agrupado = {};
+            const hoy = new Date();
+            hoy.setHours(0,0,0,0);
+            
+            if (planes && planes.length > 0) {
+                // Solo planes abiertos con fecha de cumplimiento
+                const abiertos = planes.filter(p => {
+                    const estado = (p.estado || 'Abierto').toLowerCase();
+                    return estado !== 'cerrado' && p.fecha_cumplimiento && String(p.fecha_cumplimiento).trim() !== '';
+                });
+                
+                abiertos.forEach(p => {
+                    const obra = p.obra_nombre || 'Sin Obra';
+                    if (!agrupado[obra]) {
+                        agrupado[obra] = { en_fecha: 0, vencidos: 0 };
+                    }
+                    const meta = new Date(p.fecha_cumplimiento);
+                    if (meta < hoy) {
+                        agrupado[obra].vencidos++;
+                    } else {
+                        agrupado[obra].en_fecha++;
+                    }
+                });
+            }
+            
+            const labelsObra = Object.keys(agrupado);
+            const dataEnFecha = labelsObra.map(o => agrupado[o].en_fecha);
+            const dataVencidos = labelsObra.map(o => agrupado[o].vencidos);
+            
+            if (window.chartPlanes) window.chartPlanes.destroy();
+            window.chartPlanes = new Chart(ctxPlanes.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labelsObra.length ? labelsObra : ['Sin Datos'],
+                    datasets: [
+                        {
+                            label: 'En Fecha',
+                            data: labelsObra.length ? dataEnFecha : [0],
+                            backgroundColor: '#2ecc71'
+                        },
+                        {
+                            label: 'Fuera de Plazo',
+                            data: labelsObra.length ? dataVencidos : [0],
+                            backgroundColor: '#e74c3c'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error("Error al cargar Planes de Accion para graficos:", error);
+        }
     }
 }
 
@@ -3771,20 +4353,30 @@ function generarReportePDF(mode = 'download', aud_id = null, cb = null) {
             document.getElementById('pdf-cierre-compromisos').innerText = `Planes de acción aprobados.`;
             document.getElementById('pdf-fecha-firma-prev').innerText = complDate;
             document.getElementById('pdf-fecha-firma-obra').innerText = complDate;
+            
+            document.getElementById('pdf-label-firma-prev').innerText = "Firma Administrador de Obra";
+            document.getElementById('pdf-firma-prev').innerText = "Administrador de Obra";
+            document.getElementById('pdf-label-firma-obra').innerText = "Firma Experto Prevención";
+            document.getElementById('pdf-firma-obra').innerText = prevNombre;
         } else {
             document.getElementById('pdf-cierre-compromisos').innerText = "Revisar anexo de planes de acción (si aplica).";
             document.getElementById('pdf-fecha-firma-prev').innerText = "";
             document.getElementById('pdf-fecha-firma-obra').innerText = "";
+            
+            document.getElementById('pdf-label-firma-prev').innerText = "Firma Gerente/Coordinador Prev.";
+            document.getElementById('pdf-firma-prev').innerText = "Gerente/Coordinador";
+            document.getElementById('pdf-label-firma-obra').innerText = "Firma Experto Prevención";
+            document.getElementById('pdf-firma-obra').innerText = prevNombre;
         }
-        
-        document.getElementById('pdf-firma-prev').innerText = prevNombre;
-        document.getElementById('pdf-firma-obra').innerText = "Representante Obra";
     } else {
         document.getElementById('pdf-cierre-box').style.display = 'none';
         document.getElementById('pdf-fecha-firma-prev').innerText = "";
         document.getElementById('pdf-fecha-firma-obra').innerText = "";
-        document.getElementById('pdf-firma-prev').innerText = prevNombre;
-        document.getElementById('pdf-firma-obra').innerText = 'Representante Obra';
+        
+        document.getElementById('pdf-label-firma-prev').innerText = "Firma Gerente/Coordinador Prev.";
+        document.getElementById('pdf-firma-prev').innerText = "Gerente/Coordinador";
+        document.getElementById('pdf-label-firma-obra').innerText = "Firma Experto Prevención";
+        document.getElementById('pdf-firma-obra').innerText = prevNombre;
     }
 
     // (Page 3)
@@ -4029,3 +4621,73 @@ document.querySelectorAll('.nav-links li').forEach(li => {
         }
     });
 });
+
+async function loadPagos() {
+    const nombreEl = document.getElementById('pagos-empresa-nombre');
+    const vigenciaEl = document.getElementById('pagos-empresa-vigencia');
+    const tbody = document.getElementById('tabla-pagos');
+
+    if (!window.currentEmpresaId || window.currentEmpresaId === 'None' || window.currentEmpresaId === 'nan') {
+        if(nombreEl) nombreEl.innerText = "Seleccione una empresa en la barra superior";
+        if(vigenciaEl) vigenciaEl.innerText = "-";
+        if(tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Seleccione una empresa para ver sus pagos</td></tr>';
+        return;
+    }
+
+    try {
+        const empresas = await fetchAPI('/api/empresas');
+        if (empresas) {
+            const empresa = empresas.find(e => String(e.id) === String(window.currentEmpresaId));
+            if (empresa) {
+                if(nombreEl) nombreEl.innerText = empresa.nombre || "Empresa Desconocida";
+                const inicio = empresa.fecha_inicio || "No definida";
+                const fin = empresa.fecha_fin || "No definida";
+                if(vigenciaEl) vigenciaEl.innerText = `${inicio} - ${fin}`;
+            }
+        }
+
+        const pagos = await fetchAPI(`/api/pagos?empresa_id=${window.currentEmpresaId}`);
+        if(tbody) {
+            if (!pagos || pagos.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No hay pagos registrados para esta empresa</td></tr>';
+            } else {
+                let html = '';
+                pagos.forEach(p => {
+                    html += `<tr>
+                        <td>${p.numero_factura || '-'}</td>
+                        <td>$${parseFloat(p.monto || 0).toLocaleString('es-CL')}</td>
+                        <td>${p.fecha_pago || '-'}</td>
+                    </tr>`;
+                });
+                tbody.innerHTML = html;
+            }
+        }
+    } catch (e) {
+        console.error("Error loading pagos:", e);
+    }
+}
+
+function abrirModalPago() {
+    if (!window.currentEmpresaId || window.currentEmpresaId === 'None' || window.currentEmpresaId === 'nan') {
+        alert("Debe seleccionar una empresa en la barra superior primero.");
+        return;
+    }
+    const form = document.getElementById('form-pago');
+    if (form) form.reset();
+    
+    // Asignar el ID de la empresa a un hidden input si existiera
+    const empInput = document.getElementById('p_empresa_id');
+    if (empInput) empInput.value = window.currentEmpresaId;
+    
+    const lbl = document.getElementById('lbl-pago-empresa-nombre');
+    const globalName = getEmpresaNameGlobal();
+    if (lbl) lbl.innerText = globalName;
+    
+    mostrarModal('modal-pago');
+}
+
+// Para evitar errores si el HTML llama a guardarPago()
+window.guardarPago = function() {
+    // Si hay un submit event listener, esto es redundante, pero evitamos el ReferenceError
+};
+

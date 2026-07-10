@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -12,6 +12,7 @@
     .non-admin .admin-only { display: none !important; }
 </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
 </head>
 <body>
     <!-- Pantalla de Selección de Perfil (Inicio) -->
@@ -288,6 +289,62 @@
 
                     <!-- Audit History View -->
                     <div id="view-audit-history">
+                        <!-- Filtros de Historial Auditorias -->
+                        <div class="glassmorphism" style="padding: 20px; margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; width: 100%; max-width: 100%;">
+                            <div class="form-group" style="margin: 0; min-width: 200px; display: none;">
+                                <label>Empresa</label>
+                                <select id="filtro_empresa_historial" onchange="actualizarFiltroObrasHistorial(); loadHistorialAuditorias();">
+                                    <option value="">Todas las Empresas</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin: 0; min-width: 200px;">
+                                <label>Obra / Sucursal</label>
+                                <select id="filtro_obra_historial" onchange="actualizarFiltroPrevencionistasHistorial(); loadHistorialAuditorias();">
+                                    <option value="">Todas las Obras</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin: 0; min-width: 200px;">
+                                <label>Plantilla de Auditoría</label>
+                                <select id="filtro_plantilla_historial" onchange="loadHistorialAuditorias();">
+                                    <option value="">Todas las Plantillas</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin: 0; min-width: 200px;">
+                                <label>Prevencionista</label>
+                                <select id="filtro_prevencionista_historial" onchange="loadHistorialAuditorias();">
+                                    <option value="">Todos los Prevencionistas</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin: 0; min-width: 200px;">
+                                <label>Año de Auditoría</label>
+                                <select id="filtro_anio_historial" onchange="loadHistorialAuditorias();">
+                                    <option value="">Todos los Años</option>
+                                    <option value="2024">2024</option>
+                                    <option value="2025">2025</option>
+                                    <option value="2026">2026</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin: 0; min-width: 200px;">
+                                <label>Mes de Auditoría</label>
+                                <select id="filtro_mes_historial" onchange="loadHistorialAuditorias();">
+                                    <option value="">Todos los Meses</option>
+                                    <option value="01">Enero</option>
+                                    <option value="02">Febrero</option>
+                                    <option value="03">Marzo</option>
+                                    <option value="04">Abril</option>
+                                    <option value="05">Mayo</option>
+                                    <option value="06">Junio</option>
+                                    <option value="07">Julio</option>
+                                    <option value="08">Agosto</option>
+                                    <option value="09">Septiembre</option>
+                                    <option value="10">Octubre</option>
+                                    <option value="11">Noviembre</option>
+                                    <option value="12">Diciembre</option>
+                                </select>
+                            </div>
+                            <button class="btn-primary" onclick="loadHistorialAuditorias()" style="height: 40px;">Actualizar</button>
+                        </div>
+                        
                         <div class="table-container" style="background: var(--bg-card); border-radius: 16px; padding: 20px;">
                             <table class="data-table">
                                 <thead>
@@ -616,7 +673,7 @@
                     
                     <!-- Filtros de Planes de Acción -->
                     <div class="glassmorphism" style="padding: 20px; margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; width: 100%; max-width: 100%;">
-                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                        <div class="form-group" style="margin: 0; min-width: 200px; display: none;">
                             <label>Empresa</label>
                             <select id="filtro_empresa_planes" onchange="actualizarFiltroObrasPlanes(); loadPlanesAccion();">
                                 <option value="">Todas las Empresas</option>
@@ -711,7 +768,7 @@
                         <form id="form-reportabilidad" style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
                             
                             <!-- Contexto del reporte (Empresa, Obra, Año, Mes) -->
-                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                            <div class="form-group" style="margin: 0; flex: 1; min-width: 150px; display: none;">
                                 <label>Empresa</label>
                                 <select id="filtro_empresa_rep" onchange="actualizarFiltrosReportabilidad(); loadReportabilidad();" required>
                                     <option value="">Seleccione Empresa...</option>
@@ -832,7 +889,7 @@
                 <!-- Gráficos Reportabilidad Section -->
                 <section id="graficos-reportabilidad" class="content-section">
                     <div class="glassmorphism" style="padding: 20px; margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; width: 100%; max-width: 100%;">
-                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                        <div class="form-group" style="margin: 0; min-width: 200px; display: none;">
                             <label>Empresa</label>
                             <select id="filtro_empresa_gr" onchange="actualizarFiltroObrasGr()">
                                 <option value="">Todas las Empresas</option>
@@ -840,8 +897,20 @@
                         </div>
                         <div class="form-group" style="margin: 0; min-width: 200px;">
                             <label>Obra</label>
-                            <select id="filtro_obra_gr" onchange="cargarGraficosReportabilidad()">
+                            <select id="filtro_obra_gr" onchange="actualizarFiltrosExtrasGr().then(cargarGraficosReportabilidad)">
                                 <option value="">Todas las Obras</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Plantilla de Auditoría</label>
+                            <select id="filtro_plantilla_gr" onchange="cargarGraficosReportabilidad()">
+                                <option value="">Todas las Plantillas</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Prevencionista</label>
+                            <select id="filtro_prevencionista_gr" onchange="cargarGraficosReportabilidad()">
+                                <option value="">Todos los Prevencionistas</option>
                             </select>
                         </div>
                         <div class="form-group" style="margin: 0; min-width: 200px;">
@@ -852,6 +921,24 @@
                                 <option value="2024">2024</option>
                                 <option value="2025" selected>2025</option>
                                 <option value="2026">2026</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label>Mes</label>
+                            <select id="filtro_mes_gr" onchange="cargarGraficosReportabilidad()">
+                                <option value="">Todos los Meses</option>
+                                <option value="01">Enero</option>
+                                <option value="02">Febrero</option>
+                                <option value="03">Marzo</option>
+                                <option value="04">Abril</option>
+                                <option value="05">Mayo</option>
+                                <option value="06">Junio</option>
+                                <option value="07">Julio</option>
+                                <option value="08">Agosto</option>
+                                <option value="09">Septiembre</option>
+                                <option value="10">Octubre</option>
+                                <option value="11">Noviembre</option>
+                                <option value="12">Diciembre</option>
                             </select>
                         </div>
                         <button class="btn-primary" onclick="cargarGraficosReportabilidad()" style="height: 40px;">Actualizar Gráficos</button>
@@ -1517,6 +1604,18 @@
         </div>
     </div>
     
+    <!-- Modal Detalle Reportabilidad por Obra -->
+    <div id="modal-detalle-reportabilidad-obra" class="modal">
+        <div class="modal-content glassmorphism" style="max-width: 800px; width: 90%; max-height: 90vh;">
+            <h2 id="titulo-modal-reportabilidad-obra" style="margin-bottom: 20px; color: var(--primary-color);">Detalle por Obra</h2>
+            <div style="background: rgba(0,0,0,0.2); border-radius: 12px; padding: 10px;">
+                <canvas id="chart-detalle-reportabilidad-obra"></canvas>
+            </div>
+            <div class="form-actions" style="margin-top: 20px;">
+                <button type="button" class="btn-primary" onclick="document.getElementById('modal-detalle-reportabilidad-obra').style.display='none'">Cerrar</button>
+            </div>
+        </div>
+    </div>
     <!-- Modal Detalle Brecha -->
     <div id="modal-detalle-brecha" class="modal">
         <div class="modal-content glassmorphism" style="max-width: 900px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
@@ -1995,13 +2094,13 @@
                     <div style="text-align: center; width: 200px;">
                         <div id="pdf-fecha-firma-prev" style="font-size: 10px; color: #34495e; margin-bottom: 5px; min-height: 15px; font-weight: 500;"></div>
                         <div style="border-bottom: 1px solid #7f8c8d; margin-bottom: 5px;"></div>
-                        <div style="font-size: 10px; color: #7f8c8d;">Firma Experto Prevención</div>
+                        <div id="pdf-label-firma-prev" style="font-size: 10px; color: #7f8c8d;">Firma Experto Prevención</div>
                         <div id="pdf-firma-prev" style="font-size: 11px; color: #2c3e50; font-weight: bold; margin-top: 2px;">-</div>
                     </div>
                     <div style="text-align: center; width: 200px;">
                         <div id="pdf-fecha-firma-obra" style="font-size: 10px; color: #34495e; margin-bottom: 5px; min-height: 15px; font-weight: 500;"></div>
                         <div style="border-bottom: 1px solid #7f8c8d; margin-bottom: 5px;"></div>
-                        <div style="font-size: 10px; color: #7f8c8d;">Firma Jefe de Obra</div>
+                        <div id="pdf-label-firma-obra" style="font-size: 10px; color: #7f8c8d;">Firma Jefe de Obra</div>
                         <div id="pdf-firma-obra" style="font-size: 11px; color: #2c3e50; font-weight: bold; margin-top: 2px;">Representante Obra</div>
                     </div>
                 </div>
