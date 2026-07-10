@@ -400,14 +400,20 @@ def _cache_invalidate(key):
 # ============================================================
 def _sql_read(prefix, sheet_name):
     key = _cache_key(prefix, sheet_name)
-    cached = _cache_get(key)
-    if cached is not None:
-        return cached
+    
+    if key in STATIC_TABLES:
+        cached = _cache_get(key)
+        if cached is not None:
+            return cached
+            
     try:
         table_name = f"{prefix}{sheet_name}".lower()
         df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', engine)
         df = df.astype(str).fillna("")
-        _cache_set(key, df)
+        
+        if key in STATIC_TABLES:
+            _cache_set(key, df)
+            
         return df.copy()
     except Exception as e:
         print(f"[DB READ ERROR] {table_name}: {e}")
@@ -1887,7 +1893,7 @@ def iniciar_auditoria(data: AuditoriaIniciar):
     return {"status": "success", "id": new_id}
 
 @app.post("/api/auditorias/respuestas")
-def submit_auditoria(data: AuditoriaSubmit):
+def submit_auditoria(data: AuditoriaSubmit, background_tasks: BackgroundTasks):
     try:
         df_aud = _sql_read("AUDIT_", "Auditorias")
         df_resp = _sql_read("AUDIT_", "Respuestas")
@@ -1998,7 +2004,7 @@ def submit_auditoria(data: AuditoriaSubmit):
         _sql_write("AUDIT_", "Respuestas", df_resp)
                 
         if data.estado == "Finalizada":
-            enviar_correo_real("informe_inicial", new_aud_id, ["Administrador de Obra", "Prevencionista de Terreno"])
+            background_tasks.add_task(enviar_correo_real, "informe_inicial", new_aud_id, ["Administrador de Obra", "Prevencionista de Terreno"])
                 
         return {"status": "success", "auditoria_id": new_aud_id}
 
@@ -2794,7 +2800,7 @@ def desbloquear_auditoria(auditoria_id: str):
         raise HTTPException(status_code=500, detail="Error al desbloquear auditoria")
 
 @app.post("/api/auditorias/{auditoria_id}/cerrar")
-async def cerrar_auditoria_final(auditoria_id: str, texto_correo: str = Form(""), pdf_file: UploadFile = File(None)):
+async def cerrar_auditoria_final(auditoria_id: str, background_tasks: BackgroundTasks, texto_correo: str = Form(""), pdf_file: UploadFile = File(None)):
     try:
         df_aud = _sql_read("AUDIT_", "Auditorias")
         idx_aud = df_aud[df_aud["id"].astype(str) == str(auditoria_id)].index
@@ -2812,7 +2818,6 @@ async def cerrar_auditoria_final(auditoria_id: str, texto_correo: str = Form("")
             pdf_bytes = await pdf_file.read()
             pdf_filename = pdf_file.filename
         
-                # Enviar correos personalizados al cierre
         # Leer roles desde CorreosTerminada
         try:
             df_roles = read_excel_sheet("CorreosTerminada")
@@ -2828,7 +2833,8 @@ async def cerrar_auditoria_final(auditoria_id: str, texto_correo: str = Form("")
         except Exception:
             roles_envio = ["Administrador de Obra", "Prevencionista de Terreno", "Coordinador de Prevencion", "Gerente de Prevencion"]
             
-        enviar_correo_real(
+        background_tasks.add_task(
+            enviar_correo_real,
             "cierre", auditoria_id,
             roles_envio,
             pdf_bytes=pdf_bytes, pdf_filename=pdf_filename
